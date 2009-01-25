@@ -1,0 +1,116 @@
+We will model first-class modules in PiSigma as dependent sum
+types, together with a module signature specifying how to map
+the sum to a namespace.  
+
+So what was in Haskell:
+
+> module Foo (Foo, foo) where
+>   newtype Foo = Foo Int
+> 
+>   foo :: Foo -> Int
+>   foo (Foo z) = z
+
+Becomes in PiSigma:
+
+> FooModule : (Foo : Type ; foo : Foo -> Int ; {'Unit})
+> FooModule = (Int, id, 'Unit)
+
+And then to use this module:
+
+> split (Foo, foo, _) = FooModule in ...
+
+The ... is very important, because that is where the rest of
+the evaluation will occur.  We need to be able to continue
+to have an interactive session inside there.  In some sense,
+Foo and foo are *new* abstract objects in our environment. So
+the context of the world just changed?
+
+So this opens a context.  Do contexts ever close?  Yes, I guess so,
+when you finish writing a module and export something from it.
+Foo is now gone forever.
+
+What if FooModule is abstract -- a parameter to a lambda we are
+under or something.  What happens if we try to evaluate foo?
+Does it just stay as symbolic 'foo'?  Is there a difference between
+things we can evaluate and things we can't?
+
+Existentials nicely encode the differentness of abstract types.
+How about sameness?  Take this Haskell code, referencing the
+Foo module above.
+
+> module X (X, x) where
+>   import Foo (Foo, foo)
+>   newtype X = X Foo
+>   x :: X -> Foo
+>   x (X f) = f
+> module Y (Y, y) where
+>   import Foo (Foo, foo)
+>   y = foo (x SomeX)
+
+Where SomeX is some value of type X.  I didn't want to clutter
+things up defining it.
+
+The question is: how do we know that X's foo and Y's foo come from
+the same place?  I think I know... let's try to compile X:
+
+> XModule : (X : Type; x : X -> Foo; {'Unit})
+> ...
+
+That type signature is messed up.  Foo is not defined, that is not
+a well-formed type signature.
+
+Perhaps it is that modules are (ML) functors on their dependencies?
+
+> XModule : (foomod : FooModule) -> 
+               split (Foo, _, _) = foomod in
+                  (X : Type; x : X -> Foo; {'Unit})
+
+That kinda makes sense, but is ugly as all heck.  And it doesn't
+make sense for private dependencies.  Basically, we only do this
+for "public" dependencies, whose types appear in the module
+signature.
+
+Hmm, it's ugly, but I'm not sure there is any other way.  If we
+have two modules talking about Foos, and they need to interact with
+each other, those two Foos had to come from the same place: outside
+of *both* of them.
+
+Is it provable in PiSigma?  Do we know that two elements of a split
+are the same if they came from the same place.  I guess my question
+is: does this typecheck?
+
+> test : (p : (A : Type ; A)) -> split (A,x) = p in A
+> test p = split (A,x) = p in x
+
+The PiSigma prototype checker says it's okay.  I think it's the
+middle rule in Figure 6 in the paper that allows this.
+
+But now we are definitely in the conundrum that FooModule is
+abstract, because that's how we are modeling dependencies.  It
+makes sense that this is impossible, because we are abstracting
+over which "version" of the module we are using, so we can't
+possibly know what the implementations will be (unless there are
+exported theorems about them).
+
+On the other hand, if we just picked a version for interactivity's
+sake, we could lose consistency, because the definitions in
+FooModule could affect what types are chosen, which affect whether
+our module typechecks!
+
+Oh, but modules are first class so they can have scope!  Instead of
+abstracting over FooModules, we can just always have a FooModule in
+scope.  And when it is, we can use its definitons while we are
+developing.  When developing an abstraction, the abstracted bits
+can't be used, obviously.  For interactivity, it would be cool to
+do a ToonTalk-like post-abstraction, but that is certainly not in
+the realm of the core calculus.
+
+So what about the bigger picture?  How do contexts open and close,
+and how does information from a partially completed term get to the
+outside world so we can display it?
+
+Let's say a CUI is modeled as a simple state machine:
+
+> newtype CUI = CUI (String -> (String, CUI))
+
+
