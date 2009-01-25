@@ -1,0 +1,8 @@
+Dana - a purely functional (virtual) operating system.
+
+The goal is to be an interactive development environment which is 
+purely functional, denotational, and composable all the way down 
+to the "device drivers".
+
+The present plan is to make it image-based, like Squeak or many
+lisp enviornments.
