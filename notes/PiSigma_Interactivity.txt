@@ -113,4 +113,4 @@ Let's say a CUI is modeled as a simple state machine:
 
 > newtype CUI = CUI (String -> (String, CUI))
 
-
+vim: ft=lhaskell :
