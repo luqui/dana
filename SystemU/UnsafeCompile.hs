@@ -23,12 +23,6 @@ data TypeFree
 
     | Native Any
 
-instance Show TypeFree where
-    show (Var n) = show n
-    show (Lam b) = "(\\." ++ show b ++ ")"
-    show (App f x) = "(" ++ show f ++ " " ++ show x ++ ")"
-    show (Native _) = "?"
-
 
 toTypeFree :: AST.AST -> TypeFree
 toTypeFree (AST.Var i)  = Var i
