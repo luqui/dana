@@ -4,6 +4,7 @@ import qualified SystemU.AST as AST
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Applicative
+import Control.Monad.Error
 
 newtype Ref = Ref Integer
     deriving (Eq,Ord)
@@ -25,13 +26,50 @@ data Neutral
     | NApp Neutral Value
 
 
-data Env = Env { envTypes :: [Value], envDefs :: [Value] }
+type ShowM = State Integer
 
-type Typecheck = ReaderT Env (State Integer)
+newNeutralShow :: ShowM Value
+newNeutralShow = do
+    c <- get
+    put $! (c+1)
+    return (VNeutral (NRef (Ref c)))
+
+showVal :: Value -> ShowM String
+showVal (VCanon (CType TType)) = return "Type"
+showVal (VCanon (CType (TPi dom f))) = do
+    n <- newNeutralShow
+    dom' <- showVal dom
+    rng' <- showVal (f n)
+    n' <- showVal n
+    return $ "(/\\" ++ n' ++ " : " ++ dom' ++ ". " ++ rng' ++ ")"
+showVal (VCanon (CFun f)) = do
+    n <- newNeutralShow
+    n' <- showVal n
+    body <- showVal (f n)
+    return $ "(\\" ++ n' ++ ". " ++ body ++ ")"
+showVal (VNeutral n) = showNeutral n
+
+showNeutral :: Neutral -> ShowM String
+showNeutral (NRef (Ref r)) = return $ "@" ++ show r
+showNeutral (NApp n v) = do
+    n' <- showNeutral n
+    v' <- showVal v
+    return $ "(" ++ n' ++ " " ++ v' ++ ")"
+
+instance Show Value where
+    show v = evalState (showVal v) 0
+
+
+data Env = Env { envTypes :: [Value], envDefs :: [Value] }
 
 getType,getDef :: Int -> Env -> Value
 getType x e = envTypes e !! x
 getDef  x e = envDefs  e !! x
+
+type Typecheck = ErrorT String (ReaderT Env (State Integer))
+
+runTypecheck :: Typecheck a -> Either String a
+runTypecheck m = evalState (runReaderT (runErrorT m) (Env [] [])) 0
 
 newRef :: Typecheck Ref
 newRef = do
@@ -78,8 +116,10 @@ typecheck (AST.Pi ty body) = do
     return (vType TType)
 
 typecheck (AST.Lam dom ast) = do
-    dom' <- typecheck dom
-    assertEq dom' (vType TType)
+    domt <- typecheck dom
+    assertEq domt (vType TType)
+
+    dom' <- eval dom
 
     r <- newRef
     let n = VNeutral (NRef r)
