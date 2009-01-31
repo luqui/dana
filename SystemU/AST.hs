@@ -1,13 +1,9 @@
-module PiSigma.AST where
-
-type Var = String
-newtype Label = Label String
-    deriving (Eq,Show)
+module SystemU.AST where
 
 data AST
-    = Var Var
+    = Var Int
     | Type    
 
-    | Pi  Var AST AST
-    | Lam Var AST
+    | Pi  AST AST
+    | Lam AST AST
     | App AST AST
