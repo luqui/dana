@@ -10,6 +10,7 @@ import Prelude hiding (lex)
 import qualified SystemU.AST as AST
 import Control.Monad.Reader
 import qualified Data.Map as Map
+import Control.Monad.Fix
 
 type Var = String
 data FancyAST
@@ -18,6 +19,7 @@ data FancyAST
     | Pi Var FancyAST FancyAST
     | Lam Var FancyAST FancyAST
     | App FancyAST FancyAST
+    | LetRec [(Var, FancyAST)] FancyAST
     deriving Show
 
 
@@ -40,6 +42,13 @@ convertFancy (App f x) = do
     f' <- convertFancy f
     x' <- convertFancy x
     return $ AST.App f' x'
+convertFancy (LetRec defs body) = do
+    let offset = length defs
+    let withIdxs = Map.fromList (zip (map fst defs) (reverse [0..offset-1]))
+    local (Map.union withIdxs . Map.map (+ offset)) $ do
+        lets <- forM defs (\(_, ast) -> convertFancy ast)
+        body' <- convertFancy body
+        return (AST.LetRec lets body')
 
 toAST :: FancyAST -> AST.AST
 toAST fancy = runReader (convertFancy fancy) Map.empty
@@ -56,7 +65,7 @@ lex p = do
     P.skipSpaces
     return ret
 
-reservedWords = ["Type", "_"]
+reservedWords = ["Type", "_", "let", "in"]
 
 word = lex $ do
     c0 <- P.satisfy (\c -> Char.isAlpha c || c == '_')
@@ -65,6 +74,10 @@ word = lex $ do
 
 char = lex . P.char
 string = lex . P.string
+keyword s = do
+    w <- word
+    guard (w == s)
+    return w
 
 identifier = do
     w <- word
@@ -77,14 +90,11 @@ termExpr = P.choice [ var, typeType, parenExpr ]
 
 appExpr = P.chainl1 termExpr (pure App)
 
-expr = P.choice [ piExpr, lambda ]
+expr = P.choice [ piExpr, lambda, letrec ]
 
 var = Var <$> identifier
 
-typeType = do
-    w <- word
-    guard (w == "Type")
-    return Type
+typeType = keyword "Type" *> pure Type
 
 piExpr = P.choice [ dep, arrow, appExpr ]
     where
@@ -97,6 +107,12 @@ piExpr = P.choice [ dep, arrow, appExpr ]
 lambda = Lam <$> (char '\\' *> identifier)
              <*> (char ':' *> expr)
              <*> (char '.' *> expr)
+
+letrec = keyword "let" *> 
+         (LetRec <$> P.chainr ((:[]) <$> def) (char ';' *> pure (++)) []
+                 <*> (keyword "in" *> expr))
+    where
+    def = (,) <$> identifier <*> (char '=' *> expr)
 
 program = P.skipSpaces *> expr
 

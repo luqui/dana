@@ -1,3 +1,5 @@
+{-# LANGUAGE RecursiveDo #-}
+
 module SystemU.Compiler where
 
 import qualified SystemU.AST as AST
@@ -139,6 +141,16 @@ typecheck (AST.App a b) = do
             return (rng val)
         _ -> fail $ "Application of non-Pi: " ++ show fun
 
+typecheck (AST.LetRec defs body) = mdo
+    ~(ret,envf) <- local envf $ do
+        envs <- forM defs $ \def -> do
+            ty <- typecheck def
+            val <- eval def
+            return (subenv ty val)
+        r <- typecheck body
+        return (r, foldr (.) id envs) 
+    return ret
+
 
 eval :: AST.AST -> Typecheck Value
 eval (AST.Var ix) = asks (getDef ix)
@@ -160,6 +172,15 @@ eval (AST.App fun arg) = do
         VNeutral n -> VNeutral (NApp n arg')
         VCanon (CFun f) -> f arg'
         _ -> error $ "Impossible, function type not a function: " ++ show fun'
+eval (AST.LetRec defs body) = mdo
+    ~(ret,envf) <- local envf $ do
+        envs <- forM defs $ \def -> do
+            ty <- typecheck def
+            val <- eval def
+            return (subenv ty val)
+        r <- eval body
+        return (r, foldr (.) id envs)
+    return ret
 
 
 subst :: Ref -> Value -> Value -> Value
