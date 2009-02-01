@@ -1,4 +1,6 @@
-module SystemU.Parser where
+module SystemU.Parser 
+    ( parses )
+where
 
 import qualified Text.ParserCombinators.ReadP as P
 import Control.Applicative

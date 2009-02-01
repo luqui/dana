@@ -26,12 +26,15 @@ data Neutral
     | NApp Neutral Value
 
 
+-- Mega Hax!!
+-- We use negative neutrals when showing to keep from interfering
+-- with the main substitution mechanic.
 type ShowM = State Integer
 
 newNeutralShow :: ShowM Value
 newNeutralShow = do
     c <- get
-    put $! (c+1)
+    put $! (c-1)
     return (VNeutral (NRef (Ref c)))
 
 showVal :: Value -> ShowM String
@@ -50,14 +53,14 @@ showVal (VCanon (CFun f)) = do
 showVal (VNeutral n) = showNeutral n
 
 showNeutral :: Neutral -> ShowM String
-showNeutral (NRef (Ref r)) = return $ "@" ++ show r
+showNeutral (NRef (Ref r)) = return $ "@" ++ show (-r)
 showNeutral (NApp n v) = do
     n' <- showNeutral n
     v' <- showVal v
     return $ "(" ++ n' ++ " " ++ v' ++ ")"
 
 instance Show Value where
-    show v = evalState (showVal v) 0
+    show v = evalState (showVal v) (-1)
 
 
 data Env = Env { envTypes :: [Value], envDefs :: [Value] }
@@ -134,7 +137,7 @@ typecheck (AST.App a b) = do
             assertEq arg dom
             val <- eval b
             return (rng val)
-        _ -> fail "Application of non-Pi" 
+        _ -> fail $ "Application of non-Pi: " ++ show fun
 
 
 eval :: AST.AST -> Typecheck Value
@@ -156,7 +159,7 @@ eval (AST.App fun arg) = do
     return $ case fun' of
         VNeutral n -> VNeutral (NApp n arg')
         VCanon (CFun f) -> f arg'
-        _ -> error "Impossible, function type not a function"
+        _ -> error $ "Impossible, function type not a function: " ++ show fun'
 
 
 subst :: Ref -> Value -> Value -> Value
