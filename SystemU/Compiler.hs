@@ -142,14 +142,12 @@ typecheck (AST.App a b) = do
         _ -> fail $ "Application of non-Pi: " ++ show fun
 
 typecheck (AST.LetRec defs body) = mdo
-    ~(ret,envf) <- local envf $ do
-        envs <- forM defs $ \def -> do
-            ty <- typecheck def
-            val <- eval def
-            return (subenv ty val)
-        r <- typecheck body
-        return (r, foldr (.) id envs) 
-    return ret
+    let envy = foldr (.) id $ zipWithSpine defs subenv types vals
+    ~(types,vals) <- local envy $ do
+        types <- mapM typecheck defs
+        vals  <- mapM eval defs
+        return (types, vals)
+    local envy $ typecheck body
 
 
 eval :: AST.AST -> Typecheck Value
@@ -173,15 +171,16 @@ eval (AST.App fun arg) = do
         VCanon (CFun f) -> f arg'
         _ -> error $ "Impossible, function type not a function: " ++ show fun'
 eval (AST.LetRec defs body) = mdo
-    ~(ret,envf) <- local envf $ do
-        envs <- forM defs $ \def -> do
-            ty <- typecheck def
-            val <- eval def
-            return (subenv ty val)
-        r <- eval body
-        return (r, foldr (.) id envs)
-    return ret
+    let envy = foldr (.) id $ zipWithSpine defs subenv types vals
+    ~(types,vals) <- local envy $ do
+        types <- mapM typecheck defs
+        vals  <- mapM eval defs
+        return (types, vals)
+    local envy $ eval body
 
+zipWithSpine :: [a] -> (b -> c -> d) -> [b] -> [c] -> [d]
+zipWithSpine [] _ _ _ = []
+zipWithSpine (_:ss) f ~(b:bs) ~(c:cs) = f b c : zipWithSpine ss f bs cs
 
 subst :: Ref -> Value -> Value -> Value
 subst r for t@(VCanon (CType TType)) = t
