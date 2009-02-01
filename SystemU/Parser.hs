@@ -128,7 +128,7 @@ var = Var <$> identifier
 
 typeType = keyword "Type" *> pure Type
 
-int = read <$> P.munch Char.isDigit
+int = lex $ read <$> P.munch1 Char.isDigit
 
 finiteType = Finite <$> int
 

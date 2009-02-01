@@ -190,7 +190,9 @@ typecheck (AST.App a b) = do
 
 typecheck (AST.Finite n) = return (vType TType)
 
-typecheck (AST.Label ss n) = return (vType (TFinite n))
+typecheck (AST.Label ss n) = do
+    unless (ss >= 0 && ss < n) . fail $ "Illegal label (" ++ show ss ++ ":" ++ show n ++ ")"
+    return (vType (TFinite n))
 
 typecheck (AST.Case scrutinee ret cases) = do
     fin <- typecheck scrutinee
@@ -319,12 +321,12 @@ subst r for t@(VCanon (CType TType)) = t
 subst r for (VCanon (CType (TPi dom f))) = VCanon (CType (TPi dom' f'))
     where
     dom' = subst r for dom
-    f' = subst r for . f
+    f' = subst r for . f . subst r for
 subst r for (VCanon (CType (TPartial v))) = VCanon (CType (TPartial (subst r for v)))
 subst r for (VCanon (CType (TFinite n))) = VCanon (CType (TFinite n))
 subst r for (VCanon (CFun f)) = VCanon (CFun f')
     where
-    f' = subst r for . f
+    f' = subst r for . f . subst r for
 subst r for (VCanon (CBox cl v)) = VCanon (CBox (cl ++ [(r,for)]) v)
 subst r for (VCanon (CLabel l)) = VCanon (CLabel l)
 subst r for (VNeutral n) = substN r for n
