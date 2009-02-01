@@ -13,6 +13,7 @@ newtype Ref = Ref Integer
 
 data Type
     = TType
+    | TPartial Value
     | TPi Value (Value -> Value)
 
 data Value
@@ -22,10 +23,12 @@ data Value
 data Canon
     = CType Type
     | CFun (Value -> Value)
+    | CBox [(Ref,Value)] Value  -- holds an explicit closure
 
 data Neutral
     = NRef Ref
     | NApp Neutral Value
+    | NUnbox Neutral
 
 
 -- Mega Hax!!
@@ -149,6 +152,23 @@ typecheck (AST.LetRec defs body) = mdo
         return (types, vals)
     local envy $ typecheck body
 
+typecheck (AST.Partial sub) = do
+    t <- typecheck sub
+    assertEq t (vType TType)
+    return (vType TType)
+
+typecheck (AST.Box sub) = do
+    -- I don't think definitions are hidden when typechecking
+    -- a box, just evaluating it.
+    t <- typecheck sub
+    return (vType (TPartial t))
+
+typecheck (AST.Unbox sub) = do
+    t <- typecheck sub
+    case t of
+        VCanon (CType (TPartial t)) -> return t
+        _ -> fail $ "Type error when checking unbox: " ++ show sub
+    
 
 eval :: AST.AST -> Typecheck Value
 eval (AST.Var ix) = asks (getDef ix)
@@ -177,6 +197,23 @@ eval (AST.LetRec defs body) = mdo
         vals  <- mapM eval defs
         return (types, vals)
     local envy $ eval body
+eval (AST.Partial sub) = do
+    t <- eval sub
+    return (vType (TPartial t))
+eval (AST.Box sub) = do
+    defs <- asks envDefs
+    restore <- forM defs $ \def -> do { r <- newRef; return (r,def) }
+    let newDefs = map (VNeutral . NRef . fst) restore
+    t <- local (\e -> e { envDefs = newDefs }) $ eval sub
+    return (VCanon (CBox restore t))
+eval (AST.Unbox sub) = do
+    t <- eval sub
+    case t of
+        VCanon (CBox restore v') -> return $ 
+            foldr (.) id [ subst r def | (r,def) <- restore ] v'
+        VNeutral n -> return $ VNeutral (NUnbox n)
+        _ -> fail $ "Unboxing a nonbox: " ++ show sub
+    
 
 zipWithSpine :: [a] -> (b -> c -> d) -> [b] -> [c] -> [d]
 zipWithSpine [] _ _ _ = []

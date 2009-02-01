@@ -2,12 +2,15 @@ module SystemU.AST where
 
 data AST
     = Var Int
-    | Type    
+    | Type
 
     | Pi  AST AST
     | Lam AST AST
     | App AST AST
 
     | LetRec [AST] AST 
-        -- type, value: adds one de bruijn index per def
+
+    | Partial AST  -- add bottom to type
+    | Box AST
+    | Unbox AST
     deriving Show

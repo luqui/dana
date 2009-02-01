@@ -20,6 +20,9 @@ data FancyAST
     | Lam Var FancyAST FancyAST
     | App FancyAST FancyAST
     | LetRec [(Var, FancyAST)] FancyAST
+    | Partial FancyAST
+    | Box FancyAST
+    | Unbox FancyAST
     deriving Show
 
 
@@ -49,6 +52,9 @@ convertFancy (LetRec defs body) = do
         lets <- forM defs (\(_, ast) -> convertFancy ast)
         body' <- convertFancy body
         return (AST.LetRec lets body')
+convertFancy (Partial sub) = fmap AST.Partial (convertFancy sub)
+convertFancy (Box sub) = fmap AST.Box (convertFancy sub)
+convertFancy (Unbox sub) = fmap AST.Unbox (convertFancy sub)
 
 toAST :: FancyAST -> AST.AST
 toAST fancy = runReader (convertFancy fancy) Map.empty
@@ -86,7 +92,13 @@ identifier = do
 
 parenExpr = char '(' *> expr <* char ')'
 
-termExpr = P.choice [ var, typeType, parenExpr ]
+boxExpr = char '[' *> (Box <$> expr) <* char ']'
+
+termExpr = P.choice [ var, typeType, parenExpr, boxExpr, unboxExpr, partialExpr ]
+
+unboxExpr = char '!' *> (Unbox <$> termExpr)
+
+partialExpr = char '$' *> (Partial <$> termExpr)
 
 appExpr = P.chainl1 termExpr (pure App)
 
