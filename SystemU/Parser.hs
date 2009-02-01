@@ -11,6 +11,8 @@ import qualified SystemU.AST as AST
 import Control.Monad.Reader
 import qualified Data.Map as Map
 import Control.Monad.Fix
+import Data.List (sort, sortBy)
+import Data.Ord (comparing)
 
 type Var = String
 data FancyAST
@@ -19,6 +21,9 @@ data FancyAST
     | Pi Var FancyAST FancyAST
     | Lam Var FancyAST FancyAST
     | App FancyAST FancyAST
+    | Finite Int
+    | Label Int Int
+    | Case FancyAST FancyAST [FancyAST]
     | LetRec [(Var, FancyAST, FancyAST)] FancyAST
     | Partial FancyAST
     | Box FancyAST
@@ -45,6 +50,13 @@ convertFancy (App f x) = do
     f' <- convertFancy f
     x' <- convertFancy x
     return $ AST.App f' x'
+convertFancy (Finite n) = return $ AST.Finite n
+convertFancy (Label l n) = return $ AST.Label l n
+convertFancy (Case scrutinee ret cases) = do
+    scrutinee' <- convertFancy scrutinee
+    ret' <- convertFancy ret
+    cases' <- mapM convertFancy cases
+    return $ AST.Case scrutinee' ret' cases'
 
 -- lame, no mutual recursion!
 convertFancy (LetRec [] body) = convertFancy body
@@ -75,7 +87,10 @@ lex p = do
     P.skipSpaces
     return ret
 
-reservedWords = ["Type", "_", "let", "in"]
+list sep p = P.chainr ((:[]) <$> p) (string sep *> pure (++)) [] 
+              <* P.optional (string sep)
+
+reservedWords = ["Type", "_", "let", "in", "case", "of"]
 
 word = lex $ do
     c0 <- P.satisfy (\c -> Char.isAlpha c || c == '_')
@@ -98,7 +113,8 @@ parenExpr = char '(' *> expr <* char ')'
 
 boxExpr = char '[' *> (Box <$> expr) <* char ']'
 
-termExpr = P.choice [ var, typeType, parenExpr, boxExpr, unboxExpr, partialExpr ]
+termExpr = P.choice [ var, typeType, parenExpr, boxExpr, unboxExpr, 
+                      partialExpr, finiteType, label, caseExpr ]
 
 unboxExpr = char '!' *> (Unbox <$> termExpr)
 
@@ -111,6 +127,16 @@ expr = P.choice [ piExpr, lambda, letrec ]
 var = Var <$> identifier
 
 typeType = keyword "Type" *> pure Type
+
+int = read <$> P.munch Char.isDigit
+
+finiteType = Finite <$> int
+
+label = char '(' *> (Label <$> int <*> (char ':' *> int)) <* char ')'
+
+caseExpr = Case <$> (string "case" *> expr) 
+                <*> (string "=>" *> expr <* string "of")
+                <*> (char '{' *> list ";" expr <* char '}')
 
 piExpr = P.choice [ dep, arrow, appExpr ]
     where
@@ -125,7 +151,7 @@ lambda = Lam <$> (char '\\' *> identifier)
              <*> (char '.' *> expr)
 
 letrec = keyword "let" *> 
-         (LetRec <$> P.chainr ((:[]) <$> def) (char ';' *> pure (++)) []
+         (LetRec <$> list ";" def
                  <*> (keyword "in" *> expr))
     where
     def = (,,) <$> identifier 
@@ -136,3 +162,4 @@ program = P.skipSpaces *> expr
 
 parses s = [ toAST r | (r,"") <- P.readP_to_S program s ]
 
+sortOn f = sortBy (comparing f)

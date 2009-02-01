@@ -7,6 +7,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Applicative
 import Control.Monad.Error
+import Data.List (intercalate)
 
 newtype Ref = Ref Integer
     deriving (Eq,Ord)
@@ -15,6 +16,7 @@ data Type
     = TType
     | TPartial Value
     | TPi Value (Value -> Value)
+    | TFinite Int
 
 data Value
     = VCanon Canon
@@ -24,11 +26,13 @@ data Canon
     = CType Type
     | CFun (Value -> Value)
     | CBox [(Ref,Value)] Value  -- holds an explicit closure
+    | CLabel Int
 
 data Neutral
     = NRef Ref
     | NApp Neutral Value
     | NUnbox Neutral
+    | NCase Neutral [Value]
 
 
 -- Mega Hax!!
@@ -53,6 +57,8 @@ showVal (VCanon (CType (TPi dom f))) = do
 showVal (VCanon (CType (TPartial t))) = do
     t' <- showVal t
     return $ "$" ++ t'
+showVal (VCanon (CType (TFinite n))) = do
+    return $ show n
 showVal (VCanon (CBox _ v)) = do
     v' <- showVal v
     return $ "[" ++ v' ++ "]"
@@ -61,6 +67,8 @@ showVal (VCanon (CFun f)) = do
     n' <- showVal n
     body <- showVal (f n)
     return $ "(\\" ++ n' ++ ". " ++ body ++ ")"
+showVal (VCanon (CLabel l)) = do
+    return $ "'" ++ show l
 showVal (VNeutral n) = showNeutral n
 
 showNeutral :: Neutral -> ShowM String
@@ -72,6 +80,10 @@ showNeutral (NApp n v) = do
 showNeutral (NUnbox n) = do
     n' <- showNeutral n
     return $ "!" ++ n'
+showNeutral (NCase n cs) = do
+    n' <- showNeutral n
+    cs' <- mapM showVal cs
+    return $ "case " ++ n' ++ " of { " ++ intercalate "; " cs' ++ " }"
 
 instance Show Value where
     show v = evalState (showVal v) (-1)
@@ -117,11 +129,15 @@ assertEq (VCanon (CType (TPi t f))) (VCanon (CType (TPi t' f'))) = do
     assertEq (f r) (f' r)
 assertEq (VCanon (CType (TPartial t))) (VCanon (CType (TPartial t'))) = do
     assertEq t t'
+assertEq (VCanon (CType (TFinite n))) (VCanon (CType (TFinite n'))) 
+    | n == n' = return ()
 assertEq (VCanon (CFun f)) (VCanon (CFun f')) = do
     r <- newNeutral
     assertEq (f r) (f' r)
 assertEq (VCanon (CBox cl v)) (VCanon (CBox cl' v')) = do
     assertEq v v'    -- XXX probably should do more sophisticated closure analysis
+assertEq (VCanon (CLabel l)) (VCanon (CLabel l'))
+    | l == l' = return ()
 assertEq (VNeutral (NRef r)) (VNeutral (NRef r')) 
     | r == r' = return ()
 assertEq (VNeutral (NApp n x)) (VNeutral (NApp n' x')) = do
@@ -129,6 +145,9 @@ assertEq (VNeutral (NApp n x)) (VNeutral (NApp n' x')) = do
     assertEq x x'
 assertEq (VNeutral (NUnbox n)) (VNeutral (NUnbox n')) = do
     assertEq (VNeutral n) (VNeutral n')
+assertEq (VNeutral (NCase n cs)) (VNeutral (NCase n' cs')) = do
+    assertEq (VNeutral n) (VNeutral n')
+    mapM_ (uncurry assertEq) (zip cs cs')
 assertEq v v' = fail $ "Cannot unify: " ++ show v ++ " with " ++ show v'
 
 vType = VCanon . CType
@@ -168,6 +187,27 @@ typecheck (AST.App a b) = do
             val <- eval b
             return (rng val)
         _ -> fail $ "Application of non-Pi: " ++ show fun ++ " applied to " ++ show arg
+
+typecheck (AST.Finite n) = return (vType TType)
+
+typecheck (AST.Label ss n) = return (vType (TFinite n))
+
+typecheck (AST.Case scrutinee ret cases) = do
+    fin <- typecheck scrutinee
+    n <- case fin of
+            VCanon (CType (TFinite n)) -> return n
+            _ -> fail $ "Case on non-finite type: " ++ show fin
+
+    scrutinee' <- eval scrutinee
+
+    retft <- typecheck ret
+    assertEq retft (vType (TPi fin (\_ -> vType TType)))
+    retf <- eval ret
+    
+    forM_ (zip [0..] cases) $ \(label,body) -> do
+        caset <- typecheck body
+        assertEq caset (applyVal retf (VCanon (CLabel label)))
+    return $ applyVal retf scrutinee'
 
 typecheck (AST.LetRec defs body) = go defs
     where
@@ -221,10 +261,13 @@ eval (AST.Lam ty body) = do
 eval (AST.App fun arg) = do
     fun' <- eval fun
     arg' <- eval arg
-    return $ case fun' of
-        VNeutral n -> VNeutral (NApp n arg')
-        VCanon (CFun f) -> f arg'
-        _ -> error $ "Impossible, function type not a function: " ++ show fun'
+    return $ applyVal fun' arg'
+eval (AST.Finite n) = return $ vType (TFinite n)
+eval (AST.Label l n) = return $ VCanon (CLabel l)
+eval (AST.Case scrutinee _ cases) = do
+    scrutinee' <- eval scrutinee
+    cases' <- mapM eval cases
+    return $ caseVal scrutinee' cases'
 eval (AST.LetRec defs body) = go defs
     where
     go [] = eval body
@@ -247,16 +290,29 @@ eval (AST.Box sub) = do
     return (VCanon (CBox restore t))
 eval (AST.Unbox sub) = do
     t <- eval sub
-    case t of
-        VCanon (CBox restore v') -> return $ 
-            foldr (.) id [ subst r def | (r,def) <- restore ] v'
-        VNeutral n -> return $ VNeutral (NUnbox n)
-        _ -> fail $ "Unboxing a nonbox: " ++ show sub
+    return $ unboxVal t
     
 
-zipWithSpine :: [a] -> (b -> c -> d) -> [b] -> [c] -> [d]
-zipWithSpine [] _ _ _ = []
-zipWithSpine (_:ss) f ~(b:bs) ~(c:cs) = f b c : zipWithSpine ss f bs cs
+applyVal :: Value -> Value -> Value
+applyVal f x =
+    case f of
+        VNeutral n -> VNeutral (NApp n x)
+        VCanon (CFun f) -> f x
+        _ -> error "Cannot apply non-function"
+
+caseVal :: Value -> [Value] -> Value
+caseVal s cs = 
+    case s of
+        VNeutral n -> VNeutral (NCase n cs)
+        VCanon (CLabel l) -> cs !! l
+        _ -> error "Cannot scrutinize a non-label"
+
+unboxVal :: Value -> Value
+unboxVal val =
+    case val of
+        VNeutral n -> VNeutral (NUnbox n)
+        VCanon (CBox restore v') -> foldr (.) id [subst r def | (r,def) <- restore] v'
+        _ -> error "Cannot unbox a non-box"
 
 subst :: Ref -> Value -> Value -> Value
 subst r for t@(VCanon (CType TType)) = t
@@ -265,22 +321,17 @@ subst r for (VCanon (CType (TPi dom f))) = VCanon (CType (TPi dom' f'))
     dom' = subst r for dom
     f' = subst r for . f
 subst r for (VCanon (CType (TPartial v))) = VCanon (CType (TPartial (subst r for v)))
+subst r for (VCanon (CType (TFinite n))) = VCanon (CType (TFinite n))
 subst r for (VCanon (CFun f)) = VCanon (CFun f')
     where
     f' = subst r for . f
 subst r for (VCanon (CBox cl v)) = VCanon (CBox (cl ++ [(r,for)]) v)
+subst r for (VCanon (CLabel l)) = VCanon (CLabel l)
 subst r for (VNeutral n) = substN r for n
 
 substN :: Ref -> Value -> Neutral -> Value
 substN r for (NRef r') =
     if r == r' then for else VNeutral (NRef r')
-substN r for (NApp n v) = 
-    case substN r for n of
-        VNeutral n' -> VNeutral (NApp n' (subst r for v))
-        VCanon (CFun f) -> subst r for (f v)
-        _ -> error "Impossible!"
-substN r for (NUnbox n) = 
-    case substN r for n of
-        VNeutral n' -> VNeutral (NUnbox n')
-        VCanon (CBox restore v) -> foldr (.) id [subst r def | (r,def) <- restore ] v
-        _ -> error "Bullshit!"
+substN r for (NApp n v) = applyVal (substN r for n) (subst r for v)
+substN r for (NUnbox n) = unboxVal (substN r for n)
+substN r for (NCase s cs) = caseVal (substN r for s) (map (subst r for) cs)

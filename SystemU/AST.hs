@@ -8,6 +8,10 @@ data AST
     | Lam AST AST
     | App AST AST
 
+    | Finite Int
+    | Label Int Int
+    | Case AST AST [AST]
+
     | LetRec [(AST,AST)] AST 
 
     | Partial AST  -- add bottom to type
