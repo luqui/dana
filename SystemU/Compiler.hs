@@ -76,8 +76,9 @@ showNeutral (NUnbox n) = do
 instance Show Value where
     show v = evalState (showVal v) (-1)
 
-
-data Env = Env { envTypes :: [Value], envDefs :: [Value] }
+-- envNames is a set of alternate values for the environment.
+-- we copy this to envDefs when we go under a box
+data Env = Env { envTypes :: [Value], envDefs :: [Value], envNames :: [Ref] }
 
 getType,getDef :: Int -> Env -> Value
 getType x e = envTypes e !! x
@@ -86,7 +87,7 @@ getDef  x e = envDefs  e !! x
 type Typecheck = ErrorT String (ReaderT Env (State Integer))
 
 runTypecheck :: Typecheck a -> Either String a
-runTypecheck m = evalState (runReaderT (runErrorT m) (Env [] [])) 0
+runTypecheck m = evalState (runReaderT (runErrorT m) (Env [] [] [])) 0
 
 
 newRef :: Typecheck Ref
@@ -98,8 +99,15 @@ newRef = do
 newNeutral :: Typecheck Value
 newNeutral = VNeutral . NRef <$> newRef
 
-subenv :: Value -> Value -> Env -> Env
-subenv t v e = Env { envTypes = t:envTypes e, envDefs = v:envDefs e }
+makeSubenv :: Typecheck (Value -> Value -> Env -> Env)
+makeSubenv = do
+    name <- newRef
+    return $ \t v e -> Env { envTypes = t:envTypes e, envDefs = v:envDefs e, envNames = name:envNames e}
+
+subenv :: Value -> Value -> Typecheck a -> Typecheck a
+subenv t v m = do
+    s <- makeSubenv
+    local (s t v) m
 
 assertEq :: Value -> Value -> Typecheck ()
 assertEq (VCanon (CType TType)) (VCanon (CType TType)) = return ()
@@ -135,7 +143,7 @@ typecheck (AST.Pi ty body) = do
     
     dom <- eval ty
     r <- newNeutral
-    rng <- local (subenv dom r) $ typecheck body
+    rng <- subenv dom r $ typecheck body
     assertEq rng (vType TType)
     
     return (vType TType)
@@ -148,7 +156,7 @@ typecheck (AST.Lam dom ast) = do
 
     r <- newRef
     let n = VNeutral (NRef r)
-    rng <- local (subenv dom' n) $ typecheck ast
+    rng <- subenv dom' n $ typecheck ast
     return (VCanon (CType (TPi dom' (\v -> subst r v rng))))
 
 typecheck (AST.App a b) = do
@@ -171,12 +179,12 @@ typecheck (AST.LetRec defs body) = go defs
         typv <- eval typ
         -- check the type of the body under that assumption
         r <- newRef
-        typvInfer <- local (subenv typv (VNeutral (NRef r))) $ typecheck def
+        typvInfer <- subenv typv (VNeutral (NRef r)) $ typecheck def
         assertEq typv typvInfer   -- hmm.. what happened to r?  should we subst it for body?
-        
-        -- compile the body and typecheck the rest
-        body <- local (subenv typv body) $ eval def
-        local (subenv typv body) $ go defs
+
+        sub <- makeSubenv
+        body <- local (sub typv body) $ eval def
+        local (sub typv body) $ go defs
             
 
 typecheck (AST.Partial sub) = do
@@ -203,12 +211,12 @@ eval AST.Type = return (VCanon (CType TType))
 eval (AST.Pi domast fast) = do
     dom <- eval domast
     r <- newRef
-    f <- local (subenv dom (VNeutral (NRef r))) $ eval fast
+    f <- subenv dom (VNeutral (NRef r)) $ eval fast
     return (VCanon (CType (TPi dom (\v -> subst r v f))))
 eval (AST.Lam ty body) = do
     ty' <- eval ty
     r <- newRef
-    body' <- local (subenv ty' (VNeutral (NRef r))) $ eval body
+    body' <- subenv ty' (VNeutral (NRef r)) $ eval body
     return (VCanon (CFun (\v -> subst r v body')))
 eval (AST.App fun arg) = do
     fun' <- eval fun
@@ -222,7 +230,7 @@ eval (AST.LetRec defs body) = go defs
     go [] = eval body
     go ((typ,def):defs) = mdo
         typ' <- eval typ
-        ~(ret, def') <- local (subenv typ' def') $ do
+        ~(ret, def') <- subenv typ' def' $ do
             def' <- eval def
             ret <- go defs
             return (ret,def')
@@ -232,8 +240,9 @@ eval (AST.Partial sub) = do
     return (vType (TPartial t))
 eval (AST.Box sub) = do
     defs <- asks envDefs
-    restore <- forM defs $ \def -> do { r <- newRef; return (r,def) }
-    let newDefs = map (VNeutral . NRef . fst) restore
+    names <- asks envNames
+    let restore = zip names defs
+    let newDefs = map (VNeutral . NRef) names
     t <- local (\e -> e { envDefs = newDefs }) $ eval sub
     return (VCanon (CBox restore t))
 eval (AST.Unbox sub) = do
