@@ -164,7 +164,7 @@ typecheck (AST.App a b) = do
 typecheck (AST.LetRec defs body) = go defs
     where
     go [] = typecheck body
-    go ((typ,def):defs) = do
+    go ((typ,def):defs) = mdo
         -- check that the type is a type
         assertEq (vType TType) =<< typecheck typ
         -- compile the type
@@ -173,9 +173,9 @@ typecheck (AST.LetRec defs body) = go defs
         r <- newRef
         typvInfer <- local (subenv typv (VNeutral (NRef r))) $ typecheck def
         assertEq typv typvInfer   -- hmm.. what happened to r?  should we subst it for body?
-        -- compile the body
-        body <- eval def
-        -- typecheck the rest
+        
+        -- compile the body and typecheck the rest
+        body <- local (subenv typv body) $ eval def
         local (subenv typv body) $ go defs
             
 
@@ -220,10 +220,13 @@ eval (AST.App fun arg) = do
 eval (AST.LetRec defs body) = go defs
     where
     go [] = eval body
-    go ((typ,def):defs) = do
+    go ((typ,def):defs) = mdo
         typ' <- eval typ
-        def' <- eval def
-        local (subenv typ' def') $ go defs
+        ~(ret, def') <- local (subenv typ' def') $ do
+            def' <- eval def
+            ret <- go defs
+            return (ret,def')
+        return ret
 eval (AST.Partial sub) = do
     t <- eval sub
     return (vType (TPartial t))

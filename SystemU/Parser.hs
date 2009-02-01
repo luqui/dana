@@ -52,8 +52,8 @@ convertFancy (LetRec defs body) = go [] defs
     where
     go accum [] = AST.LetRec (reverse accum) <$> convertFancy body
     go accum ((name,typ,def):defs) = do
+        typ' <- convertFancy typ
         local (Map.insert name 0 . Map.map (+1)) $ do
-            typ' <- convertFancy typ
             def' <- convertFancy def
             go ((typ',def'):accum) defs
 convertFancy (Partial sub) = fmap AST.Partial (convertFancy sub)

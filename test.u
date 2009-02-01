@@ -1,0 +1,15 @@
+let Unit  : Type = (P:Type) -> P -> P
+  ; unit  : Unit = \P:Type. \u:P. u
+
+  ; Bool  : Type = (P:Type) -> P -> P -> P
+  ; true  : Bool = \P:Type. \t:P. \f:P. t
+  ; false : Bool = \P:Type. \t:P. \f:P. f
+
+  ; Sigma : (A:Type) -> (A -> Type) -> Type 
+          = \A:Type. \P:A->Type. (R:Type) -> (U:(a:A) -> (b:P a) -> R) -> R
+  ; pair  : (A:Type) -> (P:A->Type) -> (x:A) -> P x -> Sigma A P
+          = \A:Type. \P:A->Type. \x:A. \y:P x. \R:Type. \cc:(a:A) -> (b:P a) -> R. cc x y
+
+  ; Nat : Type = Sigma Bool (\tag:Bool. !(tag ($Type) [Unit] [Nat]))
+  ; zero : Nat = pair Bool  (\tag:Bool. !(tag ($Type) [Unit] [Nat])) true unit
+in Nat
