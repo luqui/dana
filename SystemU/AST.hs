@@ -8,7 +8,7 @@ data AST
     | Lam AST AST
     | App AST AST
 
-    | LetRec [AST] AST 
+    | LetRec [(AST,AST)] AST 
 
     | Partial AST  -- add bottom to type
     | Box AST

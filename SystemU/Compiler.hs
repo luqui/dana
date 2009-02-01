@@ -50,6 +50,12 @@ showVal (VCanon (CType (TPi dom f))) = do
     rng' <- showVal (f n)
     n' <- showVal n
     return $ "(/\\" ++ n' ++ " : " ++ dom' ++ ". " ++ rng' ++ ")"
+showVal (VCanon (CType (TPartial t))) = do
+    t' <- showVal t
+    return $ "$" ++ t'
+showVal (VCanon (CBox _ v)) = do
+    v' <- showVal v
+    return $ "[" ++ v' ++ "]"
 showVal (VCanon (CFun f)) = do
     n <- newNeutralShow
     n' <- showVal n
@@ -63,6 +69,9 @@ showNeutral (NApp n v) = do
     n' <- showNeutral n
     v' <- showVal v
     return $ "(" ++ n' ++ " " ++ v' ++ ")"
+showNeutral (NUnbox n) = do
+    n' <- showNeutral n
+    return $ "!" ++ n'
 
 instance Show Value where
     show v = evalState (showVal v) (-1)
@@ -78,6 +87,7 @@ type Typecheck = ErrorT String (ReaderT Env (State Integer))
 
 runTypecheck :: Typecheck a -> Either String a
 runTypecheck m = evalState (runReaderT (runErrorT m) (Env [] [])) 0
+
 
 newRef :: Typecheck Ref
 newRef = do
@@ -97,15 +107,21 @@ assertEq (VCanon (CType (TPi t f))) (VCanon (CType (TPi t' f'))) = do
     assertEq t t'
     r <- newNeutral
     assertEq (f r) (f' r)
+assertEq (VCanon (CType (TPartial t))) (VCanon (CType (TPartial t'))) = do
+    assertEq t t'
 assertEq (VCanon (CFun f)) (VCanon (CFun f')) = do
     r <- newNeutral
     assertEq (f r) (f' r)
+assertEq (VCanon (CBox cl v)) (VCanon (CBox cl' v')) = do
+    assertEq v v'    -- XXX probably should do more sophisticated closure analysis
 assertEq (VNeutral (NRef r)) (VNeutral (NRef r')) 
     | r == r' = return ()
 assertEq (VNeutral (NApp n x)) (VNeutral (NApp n' x')) = do
     assertEq (VNeutral n) (VNeutral n')
     assertEq x x'
-assertEq _ _ = fail "Unification error!"
+assertEq (VNeutral (NUnbox n)) (VNeutral (NUnbox n')) = do
+    assertEq (VNeutral n) (VNeutral n')
+assertEq v v' = fail $ "Cannot unify: " ++ show v ++ " with " ++ show v'
 
 vType = VCanon . CType
 
@@ -143,15 +159,25 @@ typecheck (AST.App a b) = do
             assertEq arg dom
             val <- eval b
             return (rng val)
-        _ -> fail $ "Application of non-Pi: " ++ show fun
+        _ -> fail $ "Application of non-Pi: " ++ show fun ++ " applied to " ++ show arg
 
-typecheck (AST.LetRec defs body) = mdo
-    let envy = foldr (.) id $ zipWithSpine defs subenv types vals
-    ~(types,vals) <- local envy $ do
-        types <- mapM typecheck defs
-        vals  <- mapM eval defs
-        return (types, vals)
-    local envy $ typecheck body
+typecheck (AST.LetRec defs body) = go defs
+    where
+    go [] = typecheck body
+    go ((typ,def):defs) = do
+        -- check that the type is a type
+        assertEq (vType TType) =<< typecheck typ
+        -- compile the type
+        typv <- eval typ
+        -- check the type of the body under that assumption
+        r <- newRef
+        typvInfer <- local (subenv typv (VNeutral (NRef r))) $ typecheck def
+        assertEq typv typvInfer   -- hmm.. what happened to r?  should we subst it for body?
+        -- compile the body
+        body <- eval def
+        -- typecheck the rest
+        local (subenv typv body) $ go defs
+            
 
 typecheck (AST.Partial sub) = do
     t <- typecheck sub
@@ -191,13 +217,13 @@ eval (AST.App fun arg) = do
         VNeutral n -> VNeutral (NApp n arg')
         VCanon (CFun f) -> f arg'
         _ -> error $ "Impossible, function type not a function: " ++ show fun'
-eval (AST.LetRec defs body) = mdo
-    let envy = foldr (.) id $ zipWithSpine defs subenv types vals
-    ~(types,vals) <- local envy $ do
-        types <- mapM typecheck defs
-        vals  <- mapM eval defs
-        return (types, vals)
-    local envy $ eval body
+eval (AST.LetRec defs body) = go defs
+    where
+    go [] = eval body
+    go ((typ,def):defs) = do
+        typ' <- eval typ
+        def' <- eval def
+        local (subenv typ' def') $ go defs
 eval (AST.Partial sub) = do
     t <- eval sub
     return (vType (TPartial t))
@@ -226,9 +252,11 @@ subst r for (VCanon (CType (TPi dom f))) = VCanon (CType (TPi dom' f'))
     where
     dom' = subst r for dom
     f' = subst r for . f
+subst r for (VCanon (CType (TPartial v))) = VCanon (CType (TPartial (subst r for v)))
 subst r for (VCanon (CFun f)) = VCanon (CFun f')
     where
     f' = subst r for . f
+subst r for (VCanon (CBox cl v)) = VCanon (CBox (cl ++ [(r,for)]) v)
 subst r for (VNeutral n) = substN r for n
 
 substN :: Ref -> Value -> Neutral -> Value
@@ -239,3 +267,8 @@ substN r for (NApp n v) =
         VNeutral n' -> VNeutral (NApp n' (subst r for v))
         VCanon (CFun f) -> subst r for (f v)
         _ -> error "Impossible!"
+substN r for (NUnbox n) = 
+    case substN r for n of
+        VNeutral n' -> VNeutral (NUnbox n')
+        VCanon (CBox restore v) -> foldr (.) id [subst r def | (r,def) <- restore ] v
+        _ -> error "Bullshit!"

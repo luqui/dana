@@ -19,7 +19,7 @@ data FancyAST
     | Pi Var FancyAST FancyAST
     | Lam Var FancyAST FancyAST
     | App FancyAST FancyAST
-    | LetRec [(Var, FancyAST)] FancyAST
+    | LetRec [(Var, FancyAST, FancyAST)] FancyAST
     | Partial FancyAST
     | Box FancyAST
     | Unbox FancyAST
@@ -45,13 +45,17 @@ convertFancy (App f x) = do
     f' <- convertFancy f
     x' <- convertFancy x
     return $ AST.App f' x'
-convertFancy (LetRec defs body) = do
-    let offset = length defs
-    let withIdxs = Map.fromList (zip (map fst defs) (reverse [0..offset-1]))
-    local (Map.union withIdxs . Map.map (+ offset)) $ do
-        lets <- forM defs (\(_, ast) -> convertFancy ast)
-        body' <- convertFancy body
-        return (AST.LetRec lets body')
+
+-- lame, no mutual recursion!
+convertFancy (LetRec [] body) = convertFancy body
+convertFancy (LetRec defs body) = go [] defs
+    where
+    go accum [] = AST.LetRec (reverse accum) <$> convertFancy body
+    go accum ((name,typ,def):defs) = do
+        local (Map.insert name 0 . Map.map (+1)) $ do
+            typ' <- convertFancy typ
+            def' <- convertFancy def
+            go ((typ',def'):accum) defs
 convertFancy (Partial sub) = fmap AST.Partial (convertFancy sub)
 convertFancy (Box sub) = fmap AST.Box (convertFancy sub)
 convertFancy (Unbox sub) = fmap AST.Unbox (convertFancy sub)
@@ -124,7 +128,9 @@ letrec = keyword "let" *>
          (LetRec <$> P.chainr ((:[]) <$> def) (char ';' *> pure (++)) []
                  <*> (keyword "in" *> expr))
     where
-    def = (,) <$> identifier <*> (char '=' *> expr)
+    def = (,,) <$> identifier 
+               <*> (char ':' *> expr)
+               <*> (char '=' *> expr)
 
 program = P.skipSpaces *> expr
 
