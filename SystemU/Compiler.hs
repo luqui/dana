@@ -114,9 +114,10 @@ typecheck (AST.Var ix) = asks (getType ix)
 typecheck AST.Type     = return $ vType TType
 
 typecheck (AST.Pi ty body) = do
-    dom <- typecheck ty
-    assertEq dom (vType TType)
+    domt <- typecheck ty
+    assertEq domt (vType TType)
     
+    dom <- eval ty
     r <- newNeutral
     rng <- local (subenv dom r) $ typecheck body
     assertEq rng (vType TType)
