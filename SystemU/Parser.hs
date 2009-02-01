@@ -5,6 +5,9 @@ import Control.Applicative
 import Control.Monad
 import qualified Data.Char as Char
 import Prelude hiding (lex)
+import qualified SystemU.AST as AST
+import Control.Monad.Reader
+import qualified Data.Map as Map
 
 type Var = String
 data FancyAST
@@ -14,6 +17,31 @@ data FancyAST
     | Lam Var FancyAST FancyAST
     | App FancyAST FancyAST
     deriving Show
+
+
+convertFancy :: FancyAST -> Reader (Map.Map Var Int) AST.AST
+convertFancy (Var n) = do
+    env <- ask
+    return $ case Map.lookup n env of
+        Nothing -> error $ "Undeclared variable: '" ++ n ++ "'"
+        Just ix -> AST.Var ix
+convertFancy Type = return AST.Type
+convertFancy (Pi v dom rngf) = do
+    dom' <- convertFancy dom
+    rngf' <- local (Map.insert v 0 . Map.map (+1)) $ convertFancy rngf
+    return $ AST.Pi dom' rngf'
+convertFancy (Lam v dom body) = do
+    dom' <- convertFancy dom
+    body' <- local (Map.insert v 0 . Map.map (+1)) $ convertFancy body
+    return $ AST.Lam dom' body'
+convertFancy (App f x) = do
+    f' <- convertFancy f
+    x' <- convertFancy x
+    return $ AST.App f' x'
+
+toAST :: FancyAST -> AST.AST
+toAST fancy = runReader (convertFancy fancy) Map.empty
+
 
 type Parser = P.ReadP
 
@@ -68,5 +96,7 @@ lambda = Lam <$> (char '\\' *> identifier)
              <*> (char ':' *> expr)
              <*> (char '.' *> expr)
 
-parse s = [ r | (r,"") <- P.readP_to_S expr s ]
+program = P.skipSpaces *> expr
+
+parses s = [ toAST r | (r,"") <- P.readP_to_S program s ]
 

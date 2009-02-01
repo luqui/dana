@@ -7,3 +7,4 @@ data AST
     | Pi  AST AST
     | Lam AST AST
     | App AST AST
+    deriving Show
