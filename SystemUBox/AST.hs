@@ -12,7 +12,7 @@ data AST
     | Label Int Int
     | Case AST AST [AST]
 
-    | LetRec [(AST,AST)] AST 
+    | LetRec AST AST AST  -- type, value, in
 
     | Partial AST  -- add bottom to type
     | Box AST

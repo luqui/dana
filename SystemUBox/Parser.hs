@@ -60,14 +60,14 @@ convertFancy (Case scrutinee ret cases) = do
 
 -- lame, no mutual recursion!
 convertFancy (LetRec [] body) = convertFancy body
-convertFancy (LetRec defs body) = go [] defs
+convertFancy (LetRec defs body) = go defs
     where
-    go accum [] = AST.LetRec (reverse accum) <$> convertFancy body
-    go accum ((name,typ,def):defs) = do
+    go [] = convertFancy body
+    go ((name,typ,def):defs) = do
         typ' <- convertFancy typ
         local (Map.insert name 0 . Map.map (+1)) $ do
             def' <- convertFancy def
-            go ((typ',def'):accum) defs
+            fmap (AST.LetRec typ' def') (go defs)
 convertFancy (Partial sub) = fmap AST.Partial (convertFancy sub)
 convertFancy (Box sub) = fmap AST.Box (convertFancy sub)
 convertFancy (Unbox sub) = fmap AST.Unbox (convertFancy sub)

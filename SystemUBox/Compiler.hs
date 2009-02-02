@@ -233,22 +233,19 @@ typecheck (AST.Case scrutinee ret cases) = do
         assertEq caset (applyVal retf (VCanon (CLabel label)))
     return $ applyVal retf scrutinee'
 
-typecheck (AST.LetRec defs body) = go defs
-    where
-    go [] = typecheck body
-    go ((typ,def):defs) = mdo
-        -- check that the type is a type
-        assertEq (vType TType) =<< typecheck typ
-        -- compile the type
-        typv <- eval typ
-        -- check the type of the body under that assumption
-        r <- newRef
-        typvInfer <- subenv typv (VNeutral (NRef r)) $ typecheck def
-        assertEq typv typvInfer   -- hmm.. what happened to r?  should we subst it for body?
+typecheck (AST.LetRec typ def body) = mdo
+    -- check that the type is a type
+    assertEq (vType TType) =<< typecheck typ
+    -- compile the type
+    typv <- eval typ
+    -- check the type of the body under that assumption
+    r <- newRef
+    typvInfer <- subenv typv (VNeutral (NRef r)) $ typecheck def
+    assertEq typv typvInfer   -- hmm.. what happened to r?  should we subst it for body?
 
-        sub <- makeSubenv
-        body <- local (sub typv body) $ eval def
-        local (sub typv body) $ go defs
+    sub <- makeSubenv
+    body' <- local (sub typv body') $ eval def
+    local (sub typv body') $ typecheck body
             
 
 typecheck (AST.Partial sub) = do
@@ -292,14 +289,11 @@ eval (AST.Case scrutinee _ cases) = do
     scrutinee' <- eval scrutinee
     cases' <- mapM eval cases
     return $ caseVal scrutinee' cases'
-eval (AST.LetRec defs body) = go defs
-    where
-    go [] = eval body
-    go ((typ,def):defs) = mdo
+eval (AST.LetRec typ def body) = mdo
         typ' <- eval typ
         ~(ret, def') <- subenv typ' def' $ do
             def' <- eval def
-            ret <- go defs
+            ret <- eval body
             return (ret,def')
         return ret
 eval (AST.Partial sub) = do

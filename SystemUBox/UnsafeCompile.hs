@@ -51,9 +51,8 @@ toTypeFree (AST.App f x) = App (toTypeFree f) (toTypeFree x)
 toTypeFree (AST.Label z t) = Native ("(" ++ show z ++ ":" ++ show t ++ ")") (makeLabel z t)
 toTypeFree (AST.Case z _ cases) = foldl App (toTypeFree z) (map toTypeFree cases)
 
-toTypeFree (AST.LetRec [] body) = toTypeFree body
-toTypeFree (AST.LetRec ((_,d):ds) body) = 
-    Lam (toTypeFree (AST.LetRec ds body)) 
+toTypeFree (AST.LetRec _ d body) = 
+    Lam (toTypeFree body) 
         `App` (Native "Y" (toAny fix) `App` Lam (toTypeFree d))
 
 -- not worrying about strictness yet
