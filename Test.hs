@@ -24,8 +24,9 @@ showType :: Type -> String
 showType Type = "Type"
 showType (Pi t f) = "(Pi " ++ showType t ++ " ?)"
 
-u :: FilePath -> IO ()
+u :: FilePath -> IO a
 u f = do
     ast <- fmap parse (readFile f)
     print (typecheck ast)
     print (eval ast)
+    return $ fromAny (compile ast)

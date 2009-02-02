@@ -71,7 +71,7 @@ makeLabel = Memo.memo2 Memo.integral Memo.integral go
     where
     go x y | x < 0 || x >= y = error "Malformed label"
     go 0 1 = toAny id
-    go 0 n = toAny $ \x -> const . fromAny (go 0 (n-1))
+    go 0 n = toAny $ const . fromAny (go 0 (n-1))
     go n m = toAny . const $ fromAny (go (n-1) (m-1))
 
 infixl 9 %
@@ -79,9 +79,9 @@ infixl 9 %
 f % x = fromAny f (fromAny x)
 
 combiK = Native "K" . toAny $ \x y -> x
-combiS = Native "S" . toAny $ \x y z -> x z (y z)
-combiC = Native "C" . toAny $ \x y z -> x z y
-combiB = Native "B" . toAny $ \x y z -> x (y z)
+combiS = Native "S" . toAny $ \x y z -> x % z % (y % z)
+combiC = Native "C" . toAny $ \x y z -> x % z % y
+combiB = Native "B" . toAny $ \x y z -> x % (y % z)
 combiI = Native "I" . toAny $ \x -> x
 
 unfree :: Int -> TypeFree -> Maybe TypeFree
