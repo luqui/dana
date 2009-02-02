@@ -1,4 +1,4 @@
-module SystemU.AST where
+module SystemUBox.AST where
 
 data AST
     = Var Int

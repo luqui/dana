@@ -1,4 +1,4 @@
-module SystemU.Any (Any, toAny, fromAny) where
+module SystemUBox.Any (Any, toAny, fromAny) where
 
 import qualified GHC.Prim
 import Unsafe.Coerce (unsafeCoerce)

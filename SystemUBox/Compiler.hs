@@ -1,8 +1,8 @@
 {-# LANGUAGE RecursiveDo #-}
 
-module SystemU.Compiler where
+module SystemUBox.Compiler where
 
-import qualified SystemU.AST as AST
+import qualified SystemUBox.AST as AST
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Applicative

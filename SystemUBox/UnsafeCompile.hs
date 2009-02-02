@@ -1,12 +1,12 @@
-module SystemU.UnsafeCompile 
-    ( module SystemU.Any
+module SystemUBox.UnsafeCompile 
+    ( module SystemUBox.Any
     , Type(..), Fun(..)
     , unsafeCompile
     )
 where
 
-import qualified SystemU.AST as AST
-import SystemU.Any
+import qualified SystemUBox.AST as AST
+import SystemUBox.Any
 
 
 data Type 

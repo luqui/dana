@@ -1,4 +1,4 @@
-module SystemU.Parser 
+module SystemUBox.Parser 
     ( parses )
 where
 
@@ -7,7 +7,7 @@ import Control.Applicative
 import Control.Monad
 import qualified Data.Char as Char
 import Prelude hiding (lex)
-import qualified SystemU.AST as AST
+import qualified SystemUBox.AST as AST
 import Control.Monad.Reader
 import qualified Data.Map as Map
 import Control.Monad.Fix

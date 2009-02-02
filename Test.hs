@@ -1,7 +1,7 @@
-import qualified SystemU.AST as U
-import qualified SystemU.Compiler as U
-import qualified SystemU.Parser as U
-import SystemU.UnsafeCompile
+import qualified SystemUBox.AST as U
+import qualified SystemUBox.Compiler as U
+import qualified SystemUBox.Parser as U
+import SystemUBox.UnsafeCompile
 
 parse :: String -> U.AST
 parse = head . U.parses
