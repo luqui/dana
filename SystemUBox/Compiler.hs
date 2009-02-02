@@ -7,6 +7,8 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Applicative
 import Control.Monad.Error
+import Control.Monad.Writer
+import qualified Data.Set as Set
 import Data.List (intercalate)
 
 newtype Ref = Ref Integer
@@ -38,55 +40,75 @@ data Neutral
 -- Mega Hax!!
 -- We use negative neutrals when showing to keep from interfering
 -- with the main substitution mechanic.
-type ShowM = State Integer
+type ShowM = WriterT (Set.Set Ref) (State Integer)
 
-newNeutralShow :: ShowM Value
-newNeutralShow = do
+newRefShow :: ShowM Ref
+newRefShow = do
     c <- get
     put $! (c-1)
-    return (VNeutral (NRef (Ref c)))
+    return (Ref c)
 
-showVal :: Value -> ShowM String
-showVal (VCanon (CType TType)) = return "Type"
-showVal (VCanon (CType (TPi dom f))) = do
-    n <- newNeutralShow
-    dom' <- showVal dom
-    rng' <- showVal (f n)
-    n' <- showVal n
-    return $ "(/\\" ++ n' ++ " : " ++ dom' ++ ". " ++ rng' ++ ")"
-showVal (VCanon (CType (TPartial t))) = do
-    t' <- showVal t
+valToName :: Integer -> String
+valToName z | z < 0     = "@" ++ show (-z)
+            | z < 26    = (:[]) $ ['a'..'z'] !! fromIntegral z
+            | otherwise = valToName (z `mod` 26) ++ show (z `div` 26)
+
+showRef (Ref c) = valToName (-c)
+
+parens :: Int -> Int -> String -> String
+parens p prec s =
+    case compare p prec of
+        LT -> "(" ++ s ++ ")"
+        GT -> s
+        EQ -> "(" ++ s ++ ")"
+
+showVal :: Int -> Value -> ShowM String
+showVal prec (VCanon (CType TType)) = return "Type"
+showVal prec (VCanon (CType (TPi dom f))) = do
+    n <- newRefShow
+    (rng',s) <- listen (showVal 1 (f (VNeutral (NRef n))))
+    case n `Set.member` s of
+        True -> do
+            dom' <- showVal 2 dom
+            return $ parens 2 prec ("(" ++ showRef n ++ " : " ++ dom' ++ ") -> " ++ rng')
+        False -> do
+            dom' <- showVal 2 dom
+            return $ parens 2 prec (dom' ++ " -> " ++ rng')
+showVal prec (VCanon (CType (TPartial t))) = do
+    t' <- showVal 3 t
     return $ "$" ++ t'
-showVal (VCanon (CType (TFinite n))) = do
+showVal prec (VCanon (CType (TFinite n))) = do
     return $ show n
-showVal (VCanon (CBox _ v)) = do
-    v' <- showVal v
+showVal prec (VCanon (CBox _ v)) = do
+    v' <- showVal 0 v
     return $ "[" ++ v' ++ "]"
-showVal (VCanon (CFun f)) = do
-    n <- newNeutralShow
-    n' <- showVal n
-    body <- showVal (f n)
-    return $ "(\\" ++ n' ++ ". " ++ body ++ ")"
-showVal (VCanon (CLabel l)) = do
+showVal prec (VCanon (CFun f)) = do
+    n <- newRefShow
+    let n' = showRef n
+    body <- showVal 0 (f (VNeutral (NRef n)))
+    return $ parens 0 prec ("\\" ++ n' ++ ". " ++ body ++ "")
+showVal prec (VCanon (CLabel l)) = do
     return $ "'" ++ show l
-showVal (VNeutral n) = showNeutral n
+showVal prec (VNeutral n) = showNeutral prec n
 
-showNeutral :: Neutral -> ShowM String
-showNeutral (NRef (Ref r)) = return $ "@" ++ show (-r)
-showNeutral (NApp n v) = do
-    n' <- showNeutral n
-    v' <- showVal v
-    return $ "(" ++ n' ++ " " ++ v' ++ ")"
-showNeutral (NUnbox n) = do
-    n' <- showNeutral n
+showNeutral :: Int -> Neutral -> ShowM String
+showNeutral prec (NRef r) = do
+    tell (Set.singleton r)
+    return $ showRef r
+showNeutral prec (NApp n v) = do
+    n' <- showNeutral 1 n
+    v' <- showVal 2 v
+    return $ parens 2 prec (n' ++ " " ++ v')
+showNeutral prec (NUnbox n) = do
+    n' <- showNeutral 3 n
     return $ "!" ++ n'
-showNeutral (NCase n cs) = do
-    n' <- showNeutral n
-    cs' <- mapM showVal cs
+showNeutral prec (NCase n cs) = do
+    n' <- showNeutral 0 n
+    cs' <- mapM (showVal 0) cs
     return $ "case " ++ n' ++ " of { " ++ intercalate "; " cs' ++ " }"
 
 instance Show Value where
-    show v = evalState (showVal v) (-1)
+    show v = evalState (fmap fst . runWriterT $ showVal 0 v) (-1)
 
 -- envNames is a set of alternate values for the environment.
 -- we copy this to envDefs when we go under a box
