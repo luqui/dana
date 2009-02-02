@@ -6,7 +6,7 @@ import Unsafe.Coerce (unsafeCoerce)
 newtype Any = Any GHC.Prim.Any
 
 toAny :: a -> Any
-toAny = unsafeCoerce
+toAny = Any . unsafeCoerce
 
 fromAny :: Any -> a
-fromAny = unsafeCoerce
+fromAny (Any x) = unsafeCoerce x
