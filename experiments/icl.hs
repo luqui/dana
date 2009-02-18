@@ -1,3 +1,7 @@
+-- System IG, from the paper _Systems of Illative Combinatory Logic
+-- complete for first-order propositional and predicate calculus_,
+-- Barendregt, Bunder, Dekkers 1993
+
 import qualified Data.Map as Map
 import Control.Monad.Reader
 import Control.Monad.State
@@ -48,6 +52,8 @@ subst n for x = x
 
 onFailure e m = catchError m (const (fail e))
 
+-- returns Just if the term given is a neutral normal form 
+-- (and thus has a type in the envt), Nothing otherwise
 typeOf :: Term -> Maybe (Proof Term)
 typeOf = go . rwhnf
     where
@@ -65,23 +71,23 @@ unify t u = unless (betaEq t u) . fail $ "Could not unify: " ++ show t ++ " = " 
 prove :: Term -> Proof ()
 prove = go . rwhnf
     where
-    go (G :% x :% y :% z) = do
+    go (G :% x :% y :% z) = do                -- rule Gi
         prove (L :% x)
         var <- newNeutral
         let n = Neutral var
         local (Map.insert var x) . prove . rwhnf $ y :% n :% (z :% n)
     go (f :% x) = do
         case (f, rwhnf x) of
-            (f, Neutral n) -> do
+            (f, Neutral n) -> do              -- first universal rule (unnamed)
                 nty <- asks (Map.lookup n)
                 maybe (fail $ show n ++ " not in environment") (unify f) nty
-            (f, z :% v) | Just typeof <- typeOf z -> do
+            (f, z :% v) | Just typeof <- typeOf z -> do -- rule Ge
                 zty <- typeof
                 case zty of
                     G :% x' :% y' -> unify f (y' :% v)
                     t -> fail $ "Couldn't apply non-function type: " ++ show t
-            (L, L) -> return ()
-            (L, G :% t :% u) -> do
+            (L, L) -> return ()               -- Type:Type, my own inconsistency
+            (L, G :% t :% u) -> do            -- rule GL
                 prove (L :% t)
                 var <- newNeutral
                 local (Map.insert var t) $ prove (L :% (u :% Neutral var))
