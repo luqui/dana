@@ -1,6 +1,13 @@
 -- System IG, from the paper _Systems of Illative Combinatory Logic
 -- complete for first-order propositional and predicate calculus_,
 -- Barendregt, Bunder, Dekkers 1993
+--
+-- The rules follow:
+-- (Ai)   X in Δ                                          =>  Δ |- X
+-- (Aβη)  Δ |- X; X =βη Y                                 =>  Δ |- Y
+-- (Ge)   Δ |- GXYZ; Δ |- XV                              =>  Δ |- YV(ZV)
+-- (Gi)   Δ |- Lx; Δ,Xx |- Yx(Zx); x not in FV(Δ,X,Y,Z)   =>  Δ |- GXYZ
+-- (GL)   Δ |- Lx; Δ,Xx |- L(Yx); x not in FV(Δ,X,Y)      =>  Δ |- L(GXY)
 
 import qualified Data.Map as Map
 import Control.Monad.Reader
@@ -15,9 +22,8 @@ data Term
     | Term :% Term
     | L
     | G
-    deriving Show
 
--- Beta equality
+-- This first section implements Aβη.  (==) is β-equality.
 instance Eq Term where
     t == u = go (rwhnf t) (rwhnf u)
         where
@@ -28,11 +34,6 @@ instance Eq Term where
         go L L = True
         go G G = True
         go _ _ = False
-
-type Proof = ErrorT String (ReaderT (Map.Map Int Term) (State Int))
-
-runProof :: Proof a -> Either String a
-runProof p = evalState (runReaderT (runErrorT p) Map.empty) 0
 
 -- Reduce a term to weak head normal form.
 rwhnf :: Term -> Term
@@ -56,6 +57,12 @@ subst n with (Var n') =
 subst n with (t :% u) = subst n with t :% subst n with u
 subst n with x = x
 
+-- This second section implements the proof search algorithm.
+type Proof = ErrorT String (ReaderT (Map.Map Int Term) (State Int))
+
+runProof :: Proof a -> Either String a
+runProof p = evalState (runReaderT (runErrorT p) Map.empty) 0
+
 onFailure e m = catchError m (const (fail e))
 
 -- returns Just if the term given is a neutral normal form 
@@ -72,7 +79,8 @@ typeOf = go . rwhnf
     go _ = Nothing
 
 unify :: Term -> Term -> Proof ()
-unify t u = unless (t == u) . fail $ "Could not unify: " ++ show t ++ " = " ++ show u
+unify t u = unless (t == u) . fail $ 
+                "Could not unify: " ++ show t ++ " = " ++ show u
 
 withNeutral :: Term -> (Term -> Proof a) -> Proof a
 withNeutral rng f = do
@@ -81,14 +89,14 @@ withNeutral rng f = do
     local (Map.insert n rng) $ f (Neutral n)
 
 prove :: Term -> Proof ()
-prove = go . rwhnf
+prove t = go . rwhnf
     where
     go (G :% x :% y :% z) = do  -- rule Gi
         prove (L :% x)
         withNeutral x $ \n -> prove . rwhnf $ y :% n :% (z :% n)
     go (fin :% xin) = do
         case (fin, rwhnf xin) of
-            -- first rule (X in ? => ? |- X)
+            -- rule Ai
             (f, Neutral n) -> unify f =<< asks (Map.! n)
             -- rule Ge
             (f, z :% v) | Just typeof <- typeOf z -> 
