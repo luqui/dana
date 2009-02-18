@@ -5,7 +5,6 @@
 import qualified Data.Map as Map
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Maybe
 import Control.Monad.Error
 
 infixl 9 :%
@@ -18,6 +17,18 @@ data Term
     | G
     deriving Show
 
+-- Beta equality
+instance Eq Term where
+    t == u = go (rwhnf t) (rwhnf u)
+        where
+        go (Lam t) (Lam u) = t == u
+        go (Var i) (Var j) = i == j
+        go (Neutral i) (Neutral j) = i == j
+        go (t :% u) (t' :% u') = go t t' && u == u'
+        go L L = True
+        go G G = True
+        go _ _ = False
+
 type Proof = ErrorT String (ReaderT (Map.Map Int Term) (State Int))
 
 runProof :: Proof a -> Either String a
@@ -29,6 +40,7 @@ newNeutral = do
     put $! n+1
     return n
 
+-- Reduce a term to weak head normal form.
 rwhnf :: Term -> Term
 rwhnf (t :% u) =
     case rwhnf t of
@@ -41,14 +53,14 @@ quote n (Var z) | n <= z = Var (z+1)
 quote n (t :% u) = quote n t :% quote n u
 quote n x = x
 
-subst n for (Lam t) = Lam (subst (n+1) (quote 0 for) t)
-subst n for (Var n') =
+subst n with (Lam t) = Lam (subst (n+1) (quote 0 with) t)
+subst n with (Var n') =
     case n' `compare` n of
         LT -> Var n'
-        EQ -> for
+        EQ -> with
         GT -> Var (n'-1)
-subst n for (t :% u) = subst n for t :% subst n for u
-subst n for x = x
+subst n with (t :% u) = subst n with t :% subst n with u
+subst n with x = x
 
 onFailure e m = catchError m (const (fail e))
 
@@ -66,41 +78,35 @@ typeOf = go . rwhnf
     go _ = Nothing
 
 unify :: Term -> Term -> Proof ()
-unify t u = unless (betaEq t u) . fail $ "Could not unify: " ++ show t ++ " = " ++ show u
+unify t u = unless (t == u) . fail $ "Could not unify: " ++ show t ++ " = " ++ show u
 
 prove :: Term -> Proof ()
 prove = go . rwhnf
     where
-    go (G :% x :% y :% z) = do                -- rule Gi
+    go (G :% x :% y :% z) = do  -- rule Gi
         prove (L :% x)
         var <- newNeutral
         let n = Neutral var
         local (Map.insert var x) . prove . rwhnf $ y :% n :% (z :% n)
     go (f :% x) = do
         case (f, rwhnf x) of
-            (f, Neutral n) -> do              -- first universal rule (unnamed)
-                nty <- asks (Map.lookup n)
-                maybe (fail $ show n ++ " not in environment") (unify f) nty
-            (f, z :% v) | Just typeof <- typeOf z -> do -- rule Ge
+            -- first rule (X in ? => ? |- X)
+            (f, Neutral n) -> unify f =<< asks (Map.! n)
+            -- rule Ge
+            (f, z :% v) | Just typeof <- typeOf z -> do
                 zty <- typeof
                 case zty of
                     G :% x' :% y' -> unify f (y' :% v)
                     t -> fail $ "Couldn't apply non-function type: " ++ show t
-            (L, L) -> return ()               -- Type:Type, my own inconsistency
-            (L, G :% t :% u) -> do            -- rule GL
+            -- Type:Type, my own contribution.  Causes inconsistency by Girard.
+            -- Remove to make consistent, but you need explicit external "L a"
+            -- assumptions to do anything useful.
+            (L, L) -> return ()
+            -- rule GL
+            (L, G :% t :% u) -> do
                 prove (L :% t)
                 var <- newNeutral
                 local (Map.insert var t) $ prove (L :% (u :% Neutral var))
             t -> fail $ "Don't know how to prove: " ++ show (f :% x)
     go t = fail $ "Couldn't prove " ++ show t ++ ": no applicable rule"
 
-betaEq :: Term -> Term -> Bool
-betaEq t u = go (rwhnf t) (rwhnf u)
-    where
-    go (Lam t) (Lam u) = betaEq t u
-    go (Var i) (Var j) = i == j
-    go (Neutral i) (Neutral j) = i == j
-    go (t :% u) (t' :% u') = go t t' && betaEq u u'
-    go L L = True
-    go G G = True
-    go _ _ = False
