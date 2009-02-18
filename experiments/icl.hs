@@ -49,16 +49,16 @@ subst n for x = x
 onFailure e m = catchError m (const (fail e))
 
 typeOf :: Term -> Proof (Maybe Term)
-typeOf = onFailure "Cannot apply nonfunction type" . runMaybeT . go
+typeOf = go . rwhnf
     where
-    typeOf' = go . rwhnf
-
-    go (Neutral n) = lift $ asks (Map.! n)
+    go (Neutral n) = lift $ asks (Just . (Map.! n))
     go (f :% x) = do
-        G :% dom :% cod <- fmap rwhnf (typeOf' f)
-        lift $ prove (dom :% x)
-        return (cod :% x)
-    go _ = fail ""
+        ty <- (fmap.fmap) rwhnf (typeOf f)
+        case ty of
+            Just (G :% dom :% cod) -> prove (dom :% x) >> return (Just (cod :% x))
+            Just _                 -> fail $ "Cannot apply nonfunction type" ++ show ty
+            Nothing                -> return Nothing
+    go _ = return Nothing
 
 unify :: Term -> Term -> Proof ()
 unify t u = unless (betaEq t u) . fail $ "Could not unify: " ++ show t ++ " = " ++ show u
