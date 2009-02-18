@@ -34,12 +34,6 @@ type Proof = ErrorT String (ReaderT (Map.Map Int Term) (State Int))
 runProof :: Proof a -> Either String a
 runProof p = evalState (runReaderT (runErrorT p) Map.empty) 0
 
-newNeutral :: Proof Int
-newNeutral = do
-    n <- get
-    put $! n+1
-    return n
-
 -- Reduce a term to weak head normal form.
 rwhnf :: Term -> Term
 rwhnf (t :% u) =
@@ -71,42 +65,43 @@ typeOf = go . rwhnf
     where
     go (Neutral n) = return . lift $ asks (Map.! n)
     go (f :% x) = do
-        fty <- (fmap.fmap) rwhnf (typeOf f)
-        return $ onFailure "Cannot apply nonfunction type" $ do
-            G :% dom :% cod <- fty
+        fty <- typeOf f
+        return $ onFailure ("Cannot apply nonfunction type in " ++ show (f :% x)) $ do
+            G :% dom :% cod <- rwhnf `fmap` fty
             prove (dom :% x) >> return (cod :% x)
     go _ = Nothing
 
 unify :: Term -> Term -> Proof ()
 unify t u = unless (t == u) . fail $ "Could not unify: " ++ show t ++ " = " ++ show u
 
+withNeutral :: Term -> (Term -> Proof a) -> Proof a
+withNeutral rng f = do
+    n <- get
+    put $! n+1
+    local (Map.insert n rng) $ f (Neutral n)
+
 prove :: Term -> Proof ()
 prove = go . rwhnf
     where
     go (G :% x :% y :% z) = do  -- rule Gi
         prove (L :% x)
-        var <- newNeutral
-        let n = Neutral var
-        local (Map.insert var x) . prove . rwhnf $ y :% n :% (z :% n)
-    go (f :% x) = do
-        case (f, rwhnf x) of
+        withNeutral x $ \n -> prove . rwhnf $ y :% n :% (z :% n)
+    go (fin :% xin) = do
+        case (fin, rwhnf xin) of
             -- first rule (X in ? => ? |- X)
             (f, Neutral n) -> unify f =<< asks (Map.! n)
             -- rule Ge
-            (f, z :% v) | Just typeof <- typeOf z -> do
-                zty <- typeof
-                case zty of
-                    G :% x' :% y' -> unify f (y' :% v)
-                    t -> fail $ "Couldn't apply non-function type: " ++ show t
+            (f, z :% v) | Just typeof <- typeOf z -> 
+                onFailure ("Couldn't apply non-function type: " ++ show z) $ do
+                    G :% x :% y <- typeof
+                    unify f (y :% v)
             -- Type:Type, my own contribution.  Causes inconsistency by Girard.
             -- Remove to make consistent, but you need explicit external "L a"
             -- assumptions to do anything useful.
             (L, L) -> return ()
             -- rule GL
-            (L, G :% t :% u) -> do
-                prove (L :% t)
-                var <- newNeutral
-                local (Map.insert var t) $ prove (L :% (u :% Neutral var))
-            t -> fail $ "Don't know how to prove: " ++ show (f :% x)
+            (L, G :% x :% y) -> do
+                prove (L :% x)
+                withNeutral x $ \z -> prove (L :% (y :% z))
+            t -> fail $ "Don't know how to prove: " ++ show (fin :% xin)
     go t = fail $ "Couldn't prove " ++ show t ++ ": no applicable rule"
-
