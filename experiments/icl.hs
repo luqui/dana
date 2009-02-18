@@ -22,6 +22,7 @@ data Term
     | Term :% Term
     | L
     | G
+    deriving (Show)
 
 -- This first section implements Aβη.  (==) is β-equality.
 instance Eq Term where
@@ -89,7 +90,7 @@ withNeutral rng f = do
     local (Map.insert n rng) $ f (Neutral n)
 
 prove :: Term -> Proof ()
-prove t = go . rwhnf
+prove = go . rwhnf
     where
     go (G :% x :% y :% z) = do  -- rule Gi
         prove (L :% x)
