@@ -44,27 +44,55 @@ subst n for (Var n') =
 subst n for (t :% u) = subst n for t :% subst n for u
 subst n for x = x
 
+typeOf :: Term -> Proof (Maybe Term)
+typeOf = go . rwhnf
+    where
+    go (Neutral n) = do
+        ty <- asks (Map.lookup n)
+        case ty of
+            Nothing -> fail $ show (Neutral n) ++ " not in environment"
+            Just ty' -> return (Just ty')
+    go (f :% x) = do
+        mtf <- typeOf f
+        case mtf of
+            Nothing -> return Nothing
+            Just tf -> case rwhnf tf of
+                           G :% dom :% cod -> do
+                               prove (dom :% x)
+                               return (Just (cod :% x))
+                           t -> fail $ "Cannot apply nonfunction type: " ++ show t
+    go _ = return Nothing
+
+unify :: Term -> Term -> Proof ()
+unify t u = unless (betaEq t u) . fail $ "Could not unify: " ++ show t ++ " = " ++ show u
+
 prove :: Term -> Proof ()
 prove = go . rwhnf
     where
-    go (t :% y) | Neutral n <- rwhnf y = do
-        ty <- asks (Map.lookup n)
-        case ty of
-            Nothing -> fail $ "Couldn't prove " ++ show (t :% Neutral n) ++ ": " ++ show (Neutral n) ++ " not in environment"
-            Just ty' -> unless (betaEq ty' t) . fail $ "Could not unify " ++ show t ++ " and " ++ show ty'
     go (G :% x :% y :% z) = do
         prove (L :% x)
         var <- newNeutral
         let n = Neutral var
         local (Map.insert var x) . prove . rwhnf $ y :% n :% (z :% n)
-    go (L :% x) =
-        case rwhnf x of
-            L -> return ()
-            G :% x :% y -> do
-                prove (L :% x)
-                var <- newNeutral
-                local (Map.insert var x) $ prove (L :% (y :% Neutral var))
-            _ -> fail $ "Couldn't prove " ++ show (L :% x)
+    go (f :% x) = do
+        case (f, rwhnf x) of
+            (f, Neutral n) -> do
+                nty <- asks (Map.lookup n)
+                maybe (fail $ show n ++ " not in environment") (unify f) nty
+            (f, z :% v) -> do
+                mzty <- typeOf z
+                case mzty of
+                    Just (G :% x' :% y') -> unify f (y' :% v)
+                    Just t -> fail $ "Couldn't apply non-function type: " ++ show t
+                    Nothing -> case (f, z :% v) of
+                                   (L, G :% t :% u) -> do
+                                       unify f L
+                                       prove (L :% t)
+                                       var <- newNeutral
+                                       local (Map.insert var t) $ prove (L :% (u :% Neutral var))
+                                   t -> fail $ "Don't know how to prove: " ++ show (f :% (z :% v))
+            (L, L) -> return ()
+            t -> fail $ "Don't know how to prove: " ++ show (f :% x)
     go t = fail $ "Couldn't prove " ++ show t ++ ": no applicable rule"
 
 betaEq :: Term -> Term -> Bool
