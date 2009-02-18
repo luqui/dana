@@ -30,13 +30,17 @@ rwhnf (t :% u) =
         t'    -> t' :% u
 rwhnf x = x
 
-shiftUp n (Lam t) = Lam (shiftUp (n+1) t)
-shiftUp n (Var z) | n <= z = Var (z+1)
-shiftUp n (t :% u) = shiftUp n t :% shiftUp n u
-shiftUp n x = x
+quote n (Lam t) = Lam (quote (n+1) t)
+quote n (Var z) | n <= z = Var (z+1)
+quote n (t :% u) = quote n t :% quote n u
+quote n x = x
 
-subst n for (Lam t) = Lam (subst (n+1) (shiftUp 0 for) t)
-subst n for (Var n') | n == n' = for
+subst n for (Lam t) = Lam (subst (n+1) (quote 0 for) t)
+subst n for (Var n') =
+    case n' `compare` n of
+        LT -> Var n'
+        EQ -> for
+        GT -> Var (n'-1)
 subst n for (t :% u) = subst n for t :% subst n for u
 subst n for x = x
 
