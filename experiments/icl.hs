@@ -48,17 +48,16 @@ subst n for x = x
 
 onFailure e m = catchError m (const (fail e))
 
-typeOf :: Term -> Proof (Maybe Term)
+typeOf :: Term -> Maybe (Proof Term)
 typeOf = go . rwhnf
     where
-    go (Neutral n) = lift $ asks (Just . (Map.! n))
+    go (Neutral n) = return . lift $ asks (Map.! n)
     go (f :% x) = do
-        ty <- (fmap.fmap) rwhnf (typeOf f)
-        case ty of
-            Just (G :% dom :% cod) -> prove (dom :% x) >> return (Just (cod :% x))
-            Just _                 -> fail $ "Cannot apply nonfunction type" ++ show ty
-            Nothing                -> return Nothing
-    go _ = return Nothing
+        fty <- (fmap.fmap) rwhnf (typeOf f)
+        return $ onFailure "Cannot apply nonfunction type" $ do
+            G :% dom :% cod <- fty
+            prove (dom :% x) >> return (cod :% x)
+    go _ = Nothing
 
 unify :: Term -> Term -> Proof ()
 unify t u = unless (betaEq t u) . fail $ "Could not unify: " ++ show t ++ " = " ++ show u
@@ -76,18 +75,16 @@ prove = go . rwhnf
             (f, Neutral n) -> do
                 nty <- asks (Map.lookup n)
                 maybe (fail $ show n ++ " not in environment") (unify f) nty
-            (f, z :% v) -> do
-                mzty <- typeOf z
-                case mzty of
-                    Just (G :% x' :% y') -> unify f (y' :% v)
-                    Just t -> fail $ "Couldn't apply non-function type: " ++ show t
-                    Nothing -> case (f, z :% v) of
-                                   (L, G :% t :% u) -> do
-                                       prove (L :% t)
-                                       var <- newNeutral
-                                       local (Map.insert var t) $ prove (L :% (u :% Neutral var))
-                                   t -> fail $ "Don't know how to prove: " ++ show (f :% (z :% v))
+            (f, z :% v) | Just typeof <- typeOf z -> do
+                zty <- typeof
+                case zty of
+                    G :% x' :% y' -> unify f (y' :% v)
+                    t -> fail $ "Couldn't apply non-function type: " ++ show t
             (L, L) -> return ()
+            (L, G :% t :% u) -> do
+                prove (L :% t)
+                var <- newNeutral
+                local (Map.insert var t) $ prove (L :% (u :% Neutral var))
             t -> fail $ "Don't know how to prove: " ++ show (f :% x)
     go t = fail $ "Couldn't prove " ++ show t ++ ": no applicable rule"
 
