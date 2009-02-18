@@ -1,6 +1,8 @@
 import qualified Data.Map as Map
 import Control.Monad.Reader
 import Control.Monad.State
+import Control.Monad.Maybe
+import Control.Monad.Error
 
 infixl 9 :%
 data Term
@@ -12,10 +14,10 @@ data Term
     | G
     deriving Show
 
-type Proof = ReaderT (Map.Map Int Term) (State Int)
+type Proof = ErrorT String (ReaderT (Map.Map Int Term) (State Int))
 
-runProof :: Proof a -> a
-runProof p = evalState (runReaderT p Map.empty) 0
+runProof :: Proof a -> Either String a
+runProof p = evalState (runReaderT (runErrorT p) Map.empty) 0
 
 newNeutral :: Proof Int
 newNeutral = do
@@ -44,24 +46,19 @@ subst n for (Var n') =
 subst n for (t :% u) = subst n for t :% subst n for u
 subst n for x = x
 
+onFailure e m = catchError m (const (fail e))
+
 typeOf :: Term -> Proof (Maybe Term)
-typeOf = go . rwhnf
+typeOf = onFailure "Cannot apply nonfunction type" . runMaybeT . go
     where
-    go (Neutral n) = do
-        ty <- asks (Map.lookup n)
-        case ty of
-            Nothing -> fail $ show (Neutral n) ++ " not in environment"
-            Just ty' -> return (Just ty')
+    typeOf' = go . rwhnf
+
+    go (Neutral n) = lift $ asks (Map.! n)
     go (f :% x) = do
-        mtf <- typeOf f
-        case mtf of
-            Nothing -> return Nothing
-            Just tf -> case rwhnf tf of
-                           G :% dom :% cod -> do
-                               prove (dom :% x)
-                               return (Just (cod :% x))
-                           t -> fail $ "Cannot apply nonfunction type: " ++ show t
-    go _ = return Nothing
+        G :% dom :% cod <- fmap rwhnf (typeOf' f)
+        lift $ prove (dom :% x)
+        return (cod :% x)
+    go _ = fail ""
 
 unify :: Term -> Term -> Proof ()
 unify t u = unless (betaEq t u) . fail $ "Could not unify: " ++ show t ++ " = " ++ show u
@@ -86,7 +83,6 @@ prove = go . rwhnf
                     Just t -> fail $ "Couldn't apply non-function type: " ++ show t
                     Nothing -> case (f, z :% v) of
                                    (L, G :% t :% u) -> do
-                                       unify f L
                                        prove (L :% t)
                                        var <- newNeutral
                                        local (Map.insert var t) $ prove (L :% (u :% Neutral var))
