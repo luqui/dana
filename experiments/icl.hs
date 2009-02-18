@@ -26,7 +26,7 @@ newNeutral = do
 rwhnf :: Term -> Term
 rwhnf (t :% u) =
     case rwhnf t of
-        Lam z -> subst 0 u z
+        Lam z -> rwhnf (subst 0 u z)
         t'    -> t' :% u
 rwhnf x = x
 
