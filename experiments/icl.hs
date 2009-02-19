@@ -90,14 +90,17 @@ withNeutral rng f = do
 
 prove :: Term -> Proof ()
 prove (L :% L) = return ()  -- inconsistent impredicativity axiom
-prove (f :% n) | Just typeof <- neutral n = unify f =<< typeof
-prove (G :% x :% y :% Lam z) = do
-    prove (L :% (G :% x :% y))
-    withNeutral x $ \n -> prove . rwhnf $ y :% n :% subst 0 n z
-prove (L :% (G :% x :% n)) | Just typeof <- neutral n = do
+prove (f :% x) = do
+    prove (L :% f)
+    proveWF f x
+
+-- proveWF f x  proves the application f x, under the
+-- assumption that L f has already been proven.
+proveWF f n | Just typeof <- neutral n = 
+    unify f =<< typeof
+proveWF (G :% x :% y) (Lam z) = withNeutral x $ \n -> 
+    prove . rwhnf $ y :% n :% subst 0 n z
+proveWF L (G :% x :% y) = do
     prove (L :% x)
-    unify (G :% x :% Lam L) =<< typeof
-prove (L :% (G :% x :% Lam t)) = do
-    prove (L :% x)
-    withNeutral x $ \n -> prove $ L :% subst 0 n t
-prove t = fail $ "Couldn't prove " ++ show t ++ ": no applicable rule"
+    proveWF (G :% x :% Lam L) y
+proveWF t u = fail $ "Couldn't prove " ++ show (t :% u)
