@@ -89,17 +89,15 @@ withNeutral rng f = do
     local (Map.insert n rng) $ f (Neutral n)
 
 prove :: Term -> Proof ()
-prove (L :% L) = return ()  -- inconsistent impredicativity axiom
-prove (f :% x) = do
-    prove (L :% f)
-    proveWF f x
+prove (f :% x) = proveWF L f >> proveWF f x
+prove x = fail $ "Cannot prove atom: " ++ show x
 
 -- proveWF f x  proves the application f x, under the
 -- assumption that L f has already been proven.
-proveWF f n | Just typeof <- neutral n = 
-    unify f =<< typeof
+proveWF L L = return ()
+proveWF f n | Just typeof <- neutral n = unify f =<< typeof
 proveWF (G :% x :% y) (Lam z) = withNeutral x $ \n -> 
-    prove . rwhnf $ y :% n :% subst 0 n z
+    let f :% x' = rwhnf (y :% n :% subst 0 n z) in proveWF f x'
 proveWF L (G :% x :% y) = do
     prove (L :% x)
     proveWF (G :% x :% Lam L) y
