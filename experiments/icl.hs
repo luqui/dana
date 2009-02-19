@@ -13,6 +13,7 @@ import qualified Data.Map as Map
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Error
+import Debug.Trace
 
 infixl 9 :%
 data Term
@@ -66,16 +67,14 @@ runProof p = evalState (runReaderT (runErrorT p) Map.empty) 0
 
 onFailure e m = catchError m (const (fail e))
 
--- returns Just if the term given is a neutral normal form 
--- (and thus has a type in the envt), Nothing otherwise
-typeOf :: Term -> Maybe (Proof Term)
-typeOf = go . rwhnf
+neutral :: Term -> Maybe (Proof Term)
+neutral = go
     where
     go (Neutral n) = return . lift $ asks (Map.! n)
     go (f :% x) = do
-        fty <- typeOf f
-        return $ onFailure ("Cannot apply nonfunction type in " ++ show (f :% x)) $ do
-            G :% dom :% cod <- rwhnf `fmap` fty
+        fty <- neutral f
+        return $ onFailure ("Cannot apply non-function type in " ++ show (f :% x)) $ do
+            G :% dom :% cod <- fty
             prove (dom :% x) >> return (cod :% x)
     go _ = Nothing
 
@@ -90,27 +89,15 @@ withNeutral rng f = do
     local (Map.insert n rng) $ f (Neutral n)
 
 prove :: Term -> Proof ()
-prove = go . rwhnf
-    where
-    go (G :% x :% y :% z) = do  -- rule Gi
-        prove (L :% x)
-        withNeutral x $ \n -> prove . rwhnf $ y :% n :% (z :% n)
-    go (fin :% xin) = do
-        case (fin, rwhnf xin) of
-            -- rule Ai
-            (f, Neutral n) -> unify f =<< asks (Map.! n)
-            -- rule Ge
-            (f, z :% v) | Just typeof <- typeOf z -> 
-                onFailure ("Couldn't apply non-function type: " ++ show z) $ do
-                    G :% x :% y <- typeof
-                    unify f (y :% v)
-            -- Type:Type, my own contribution.  Causes inconsistency by Girard.
-            -- Remove to make consistent, but you need explicit external "L a"
-            -- assumptions to do anything useful.
-            (L, L) -> return ()
-            -- rule GL
-            (L, G :% x :% y) -> do
-                prove (L :% x)
-                withNeutral x $ \z -> prove (L :% (y :% z))
-            t -> fail $ "Don't know how to prove: " ++ show (fin :% xin)
-    go t = fail $ "Couldn't prove " ++ show t ++ ": no applicable rule"
+prove (L :% L) = return ()  -- inconsistent impredicativity axiom
+prove (f :% n) | Just typeof <- neutral n = unify f =<< typeof
+prove (G :% x :% y :% Lam z) = do
+    prove (L :% (G :% x :% y))
+    withNeutral x $ \n -> prove . rwhnf $ y :% n :% subst 0 n z
+prove (L :% (G :% x :% n)) | Just typeof <- neutral n = do
+    prove (L :% x)
+    unify (G :% x :% Lam L) =<< typeof
+prove (L :% (G :% x :% Lam t)) = do
+    prove (L :% x)
+    withNeutral x $ \n -> prove $ L :% subst 0 n t
+prove t = fail $ "Couldn't prove " ++ show t ++ ": no applicable rule"
