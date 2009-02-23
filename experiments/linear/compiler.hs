@@ -1,12 +1,27 @@
+{-# LANGUAGE ImplicitParams, PatternGuards #-}
+
 import qualified Data.Map as Map
 import Control.Monad.State
 import Control.Monad.Writer
 import Data.List
+import qualified Text.ParserCombinators.ReadP as P
+import Control.Applicative
+import qualified Data.Char as Char
+import System.Environment
+
+instance Applicative P.ReadP where
+    pure = return
+    (<*>) = ap
+
+instance Alternative P.ReadP where
+    empty = mzero
+    (<|>) = mplus
 
 type Var = String
 
 data Prim
     = B | C | I | Defn Int
+    deriving Show
 
 infixl 9 :%
 data AST
@@ -14,6 +29,20 @@ data AST
     | AST :% AST
     | Var Var
     | Prim Prim
+    deriving Show
+
+parseAST :: String -> [(String,AST)]
+parseAST input = head [ ast | (ast,"") <- P.readP_to_S (P.sepBy parseDef (tok (P.char ';'))) input ]
+    where
+    tok p = p <* P.skipSpaces
+    parseDef = (,) <$> parseIdent <* tok (P.char '=') <*> parseExpr
+    parseExpr = parseLambda <|> parseApp 
+    parseLambda = Lam <$> (tok (P.char '\\') *> parseIdent <* tok (P.char '.')) <*> parseExpr
+    parseApp = foldl1 (:%) <$> P.many1 parseVar
+    parseVar = Var <$> parseIdent
+            <|> tok (P.char '(') *> parseExpr <* tok (P.char ')')
+    parseIdent = (:) <$> P.satisfy (Char.isAlpha) <*> P.munch (\c -> Char.isAlphaNum c || c == '\'')
+
 
 free :: String -> AST -> Bool
 free v (Lam x e) | v == x    = False
@@ -74,3 +103,7 @@ defnArray no = "defnptr_t DEFNS[] = {" ++ intercalate ", " [ "&defn" ++ show i |
 compile :: [(String,AST)] -> String
 compile asts = "#include \"kernel.h\"\n" 
             ++ concat (zipWith makeMaker [0..] (factor asts)) ++ defnArray (length asts)
+
+main = do
+    [input] <- getArgs
+    putStrLn . compile . parseAST $ input
