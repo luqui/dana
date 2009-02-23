@@ -1,3 +1,5 @@
+#include <sys/mman.h>
+
 struct Head {
     int tag;
     int args;
@@ -38,6 +40,21 @@ struct Pool {
     union PoolItem* head;
 };
 
+struct Pool make_pool(size_t size) {
+    void* arena = mmap(0, size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS, 0, 0);
+    int items = size / sizeof(union PoolItem);
+    int i;
+    union PoolItem* cptr = (union PoolItem*)arena;
+    struct Pool ret;
+    for (i = 0; i < items; i++) {
+        cptr->next = cptr+1;
+        cptr++;
+    }
+    (cptr-1)->next = 0;
+    ret.head = (union PoolItem*)arena;
+    return ret;
+}
+
 struct Head* alloc_Head(struct Pool* pool) {
     struct Head* ret = &pool->head->head;
     pool->head = pool->head->next;
@@ -72,6 +89,7 @@ AGAIN:
                 struct Link* lz = ly->next;
                 struct Head* z = lz->link;
                 free_item(pool, lz);
+                free_item(pool, f);
                 f = apply(x,apply(y,z,ly),lx);
                 goto AGAIN;
             }
@@ -85,6 +103,7 @@ AGAIN:
                 struct Link* lz = ly->next;
                 struct Head* z = lz->link;
                 free_item(pool, lz);
+                free_item(pool, f);
                 f = apply(apply(x,z,lx), y, ly);
                 goto AGAIN;
             }
@@ -93,12 +112,22 @@ AGAIN:
                 struct Link* lx = f->head;
                 struct Head* x = lx->link;
                 free_item(pool, lx);
+                free_item(pool, f);
                 f = x;
                 goto AGAIN;
             }
             break;
-        default:
-            f = DEFNS[f->tag](pool);
+        default: {
+            struct Head* h = DEFNS[f->tag](pool);
+            if (h->args > 0) {
+                h->tail->next = f->head;
+            }
+            else {
+                h->head = h->tail = f->head;
+            }
+            h->args += f->args;
+            free_item(pool, f);
             goto AGAIN;
+        }
     }
 }
