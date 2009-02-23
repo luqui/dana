@@ -1,16 +1,19 @@
 #include <sys/mman.h>
 #include <stdio.h>
 
+#define I -1
+#define B -2
+#define C -3
+#define PAIR -4
+#define FST -5
+#define SND -6
+
 struct Head {
     int tag;
     int args;
     struct Link* head;
     struct Link* tail;
 };
-
-#define I -1
-#define B -2
-#define C -3
 
 struct Link {
     struct Link* next;
@@ -78,6 +81,32 @@ void free_item(struct Pool* pool, void* node) {
     pool->head = item;
 }
 
+void recursive_free(struct Pool* pool, struct Head* node) {
+    struct Link* cptr = node->head;
+    while (cptr) {
+        recursive_free(pool, cptr->link);
+        struct Link* next = cptr->next;
+        free_item(pool, cptr);
+        cptr = next;
+    }
+    free_item(pool, node);
+}
+
+struct Head* append(struct Pool* pool, int arity, struct Head* f, struct Head* pfx, struct Link* link) {
+    if (pfx->args == 0) {
+        pfx->head = pfx->tail = link;
+        pfx->args = f->args - arity;
+    }
+    else {
+        pfx->tail->next = link;
+        pfx->tail = f->tail;
+        pfx->args += f->args - arity;
+    }
+    free_item(pool, f);
+    return pfx;
+}
+
+
 typedef struct Head* (*defnptr_t)(struct Pool* pool);
 extern defnptr_t DEFNS[];
 
@@ -93,9 +122,8 @@ AGAIN:
                 struct Head* y = ly->link;
                 struct Link* lz = ly->next;
                 struct Head* z = lz->link;
+                f = append(pool, 3, f, apply(x,apply(y,z,ly),lx), lz->next);
                 free_item(pool, lz);
-                free_item(pool, f);
-                f = apply(x,apply(y,z,ly),lx);
                 goto AGAIN;
             }
             break;
@@ -107,19 +135,59 @@ AGAIN:
                 struct Head* y = ly->link;
                 struct Link* lz = ly->next;
                 struct Head* z = lz->link;
+                f = append(pool, 3, f, apply(apply(x,z,lx), y, ly), lz->next);
                 free_item(pool, lz);
-                free_item(pool, f);
-                f = apply(apply(x,z,lx), y, ly);
                 goto AGAIN;
             }
+            break;
         case I:  /* Ix = x */
             if (f->args >= 1) {
                 struct Link* lx = f->head;
                 struct Head* x = lx->link;
+                f = append(pool, 1, f, x, lx->next);
                 free_item(pool, lx);
-                free_item(pool, f);
-                f = x;
                 goto AGAIN;
+            }
+            break;
+        case PAIR: break;
+        case FST:  /* FST (PAIR f g x) = f x */
+            if (f->args >= 1) {
+                struct Link* lp = f->head;
+                struct Head* p = reduce(pool, lp->link);
+                if (p->tag == PAIR) {
+                    struct Link* ffp = lp->next;
+                    struct Head* ff = ffp->link;
+                    struct Link* gfp = ffp->next;
+                    struct Head* gf = gfp->link;
+                    struct Link* xp = gfp->next;
+                    struct Head* x = xp->link;
+                    f = append(pool, 1, f, apply(ff, x, ffp), lp->next);
+                    recursive_free(pool, gf);
+                    free_item(pool, lp);
+                    free_item(pool, gfp);
+                    free_item(pool, xp);
+                    goto AGAIN;
+                }
+            }
+            break;
+        case SND:  /* SND (PAIR f g x) = g x */
+            if (f->args >= 1) {
+                struct Link* lp = f->head;
+                struct Head* p = reduce(pool, lp->link);
+                if (p->tag == PAIR) {
+                    struct Link* ffp = lp->next;
+                    struct Head* ff = ffp->link;
+                    struct Link* gfp = ffp->next;
+                    struct Head* gf = gfp->link;
+                    struct Link* xp = gfp->next;
+                    struct Head* x = xp->link;
+                    f = append(pool, 1, f, apply(gf, x, gfp), lp->next);
+                    recursive_free(pool, ff);
+                    free_item(pool, lp);
+                    free_item(pool, ffp);
+                    free_item(pool, xp);
+                    goto AGAIN;
+                }
             }
             break;
         default: {
@@ -134,6 +202,7 @@ AGAIN:
             free_item(pool, f);
             f = h;
             goto AGAIN;
+            break;
         }
     }
     return f;
