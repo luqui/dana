@@ -41,7 +41,7 @@ parseAST input = head [ ast | (ast,"") <- P.readP_to_S (P.sepBy parseDef (tok (P
     parseApp = foldl1 (:%) <$> P.many1 parseVar
     parseVar = Var <$> parseIdent
             <|> tok (P.char '(') *> parseExpr <* tok (P.char ')')
-    parseIdent = (:) <$> P.satisfy (Char.isAlpha) <*> P.munch (\c -> Char.isAlphaNum c || c == '\'')
+    parseIdent = tok $ (:) <$> P.satisfy (Char.isAlpha) <*> P.munch (\c -> Char.isAlphaNum c || c == '\'')
 
 
 free :: String -> AST -> Bool
@@ -105,5 +105,9 @@ compile asts = "#include \"kernel.h\"\n"
             ++ concat (zipWith makeMaker [0..] (factor asts)) ++ defnArray (length asts)
 
 main = do
-    [input] <- getArgs
+    args <- getArgs
+    input <- case args of
+        [] -> getContents
+        [inp] -> return inp
+        _ -> fail "usage: compiler [input]"
     putStrLn . compile . parseAST $ input
