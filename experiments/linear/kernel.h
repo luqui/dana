@@ -1,4 +1,5 @@
 #include <sys/mman.h>
+#include <stdio.h>
 
 struct Head {
     int tag;
@@ -26,6 +27,7 @@ struct Head* apply(struct Head* f, struct Head* x, struct Link* free) {
     else {
         f->args++;
         f->tail->next = free;
+        f->tail = free;
     }
     return f;
 }
@@ -41,7 +43,10 @@ struct Pool {
 };
 
 struct Pool make_pool(size_t size) {
-    void* arena = mmap(0, size, PROT_READ | PROT_WRITE, MAP_ANONYMOUS, 0, 0);
+    void* arena = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (arena == (void*)(-1)) {
+        perror("make_pool");
+    }
     int items = size / sizeof(union PoolItem);
     int i;
     union PoolItem* cptr = (union PoolItem*)arena;
@@ -77,7 +82,7 @@ typedef struct Head* (*defnptr_t)(struct Pool* pool);
 extern defnptr_t DEFNS[];
 
 
-struct Node* reduce(struct Pool* pool, struct Head* f) {
+struct Head* reduce(struct Pool* pool, struct Head* f) {
 AGAIN:
     switch (f->tag) {
         case B:  /* Bxyz = x(yz) */
@@ -127,7 +132,39 @@ AGAIN:
             }
             h->args += f->args;
             free_item(pool, f);
+            f = h;
             goto AGAIN;
         }
     }
+    return f;
+}
+
+void print_head(struct Head* h) {
+    switch (h->tag) {
+        case B: printf("B"); break;
+        case C: printf("C"); break;
+        case I: printf("I"); break;
+        default: printf("[%d]", h->tag); break;
+    }
+
+    struct Link* cptr = h->head;
+    while (cptr) {
+        if (cptr->link->args > 0) {
+            printf("(");
+            print_head(cptr->link);
+            printf(")");
+        }
+        else {
+            print_head(cptr->link);
+        }
+        cptr = cptr->next;
+    }
+}
+
+int main() {
+    struct Pool pool = make_pool(1024*1024*16); /* 16 MB */
+    struct Head head = { 0, 0, 0, 0 };
+    struct Head* ret = reduce(&pool, &head);
+    print_head(ret);
+    printf("\n");
 }

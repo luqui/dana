@@ -45,13 +45,15 @@ makeMaker :: Int -> AST -> String
 makeMaker ident ast = execWriter (runStateT main 0) 
     where
     main = do
-        tell $ "struct Node* defn" ++ show ident ++ "(struct Pool* pool) {\n"
-        make ast
+        tell $ "struct Head* defn" ++ show ident ++ "(struct Pool* pool) {\n"
+        r <- make ast
+        tell $ "return " ++ r ++ ";\n"
         tell $ "}\n"
     makePrim prim = do
         varid <- alloc
-        tell $ "struct Node* " ++ varid ++ "; " 
+        tell $ "struct Head* " ++ varid ++ " = alloc_Head(pool); " 
              ++ varid ++ "->tag = " ++ tag ++ "; " 
+             ++ varid ++ "->args = 0; "
              ++ varid ++ "->head = " ++ varid ++ "->tail = 0;\n"
         return varid
         where
@@ -70,4 +72,5 @@ defnArray :: Int -> String
 defnArray no = "defnptr_t DEFNS[] = {" ++ intercalate ", " [ "&defn" ++ show i | i <- [0..no-1] ] ++ "};\n"
 
 compile :: [(String,AST)] -> String
-compile asts = concat (zipWith makeMaker [0..] (factor asts)) ++ defnArray (length asts)
+compile asts = "#include \"kernel.h\"\n" 
+            ++ concat (zipWith makeMaker [0..] (factor asts)) ++ defnArray (length asts)
