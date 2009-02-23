@@ -1,6 +1,7 @@
 import qualified Data.Map as Map
 import Control.Monad.State
 import Control.Monad.Writer
+import Data.List
 
 type Var = String
 
@@ -64,3 +65,9 @@ makeMaker ident ast = execWriter (runStateT main 0)
         x <- get
         put (x+1)
         return $ "v" ++ show x
+
+defnArray :: Int -> String
+defnArray no = "defnptr_t DEFNS[] = {" ++ intercalate ", " [ "&defn" ++ show i | i <- [0..no-1] ] ++ "};\n"
+
+compile :: [(String,AST)] -> String
+compile asts = concat (zipWith makeMaker [0..] (factor asts)) ++ defnArray (length asts)
