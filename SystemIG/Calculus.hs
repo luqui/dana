@@ -2,6 +2,19 @@
 -- complete for first-order propositional and predicate calculus_,
 -- Barendregt, Bunder, Dekkers 1993
 
+module SystemIG.Calculus 
+    ( Term(..)
+    , Neutral(..)
+    
+    , Conversion
+    , convTerms, convId, convCompose, convFlip
+    , convBeta, convEta, convAppL, convAppR
+    
+    , Sequent
+    , hypotheses, conclusion
+    , hypothesis, conversion, apply, pitype, piWF
+    )
+
 import Control.Applicative
 import Data.List (sort, intercalate)
 
