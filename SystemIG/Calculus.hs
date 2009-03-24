@@ -4,16 +4,19 @@
 
 module SystemIG.Calculus 
     ( Term(..)
+    , subst
     , Neutral(..)
     
     , Conversion
     , convTerms, convId, convCompose, convFlip
     , convBeta, convEta, convAppL, convAppR
+    , convChain
     
     , Sequent
     , hypotheses, conclusion
-    , hypothesis, conversion, apply, pitype, piWF
+    , hypothesis, conversion, apply, piType, piWF
     )
+where
 
 import Control.Applicative
 import Data.List (sort, intercalate)
@@ -33,7 +36,7 @@ data Term
 instance Show Term where
     show = show' False False
         where
-        show' ap lp (Lam t) = parens lp $ "\\. " ++ show' False False t
+        show' ap lp (Lam t) = parens lp $ "\\." ++ show' False False t
         show' ap lp (t :* u) = parens ap $ show' False True t ++ " " ++ show' True True u
         show' ap lp (Var z) = show z
         show' ap lp (Neutral (MkNeutral n)) = "@" ++ show n
@@ -52,7 +55,7 @@ incr n (Var k) | n <= k    = Var (k+1)
 incr n x = x
 
 subst :: Int -> Term -> Term -> Term
-subst n with (Lam t) = Lam (subst (n+1) with (incr 0 t))
+subst n with (Lam t) = Lam (subst (n+1) (incr 0 with) t)
 subst n with (t :* u) = subst n with t :* subst n with u
 subst n with (Var z) | z == n = with
                      | z < n  = Var z
@@ -90,11 +93,16 @@ convCompose :: Conversion -> Conversion -> Maybe Conversion
 convCompose (a :<-> b) (b' :<-> c) | b == b' = Just (a :<-> c)
                                    | otherwise = Nothing
 
+convChain :: [Conversion] -> Maybe Conversion
+convChain [] = Nothing
+convChain [x] = Just x
+convChain (x:xs) = convCompose x =<< convChain xs
+
 convFlip :: Conversion -> Conversion
 convFlip (a :<-> b) = b :<-> a
 
 convBeta :: Term -> Maybe Conversion
-convBeta (Lam t :* x) = Just $ Lam t :<-> subst 0 x t
+convBeta (Lam t :* x) = Just $ (Lam t :* x) :<-> subst 0 x t
 convBeta _ = Nothing
 
 convEta :: Term -> Maybe Conversion
