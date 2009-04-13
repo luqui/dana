@@ -20,14 +20,14 @@ freeVars (t :% u) = freeVars t `Set.union` freeVars u
 freeVars _ = Set.empty
 
 substitute :: Var -> Term -> Term -> Maybe Term
-substitute v with = go
+substitute v with = go Set.empty
     where
     withFree = freeVars with
-    go (Lam v' t) | v' `Set.member` withFree = Nothing
-                  | otherwise = Lam v' <$> go t
-    go (Var v') | v == v' = Just with
-    go (t :% u) = liftA2 (:%) (go t) (go u)
-    go x = Just x
+    go bound (Lam v' t) = Lam v' <$> go (Set.insert v' bound) t
+    go bound (Var v') | v == v' = 
+        if v' `Set.member` bound then Nothing else Just with
+    go bound (t :% u) = liftA2 (:%) (go bound t) (go bound u)
+    go bound x = Just x
 
 alphaRename :: Var -> Term -> Maybe Term
 alphaRename v' (Lam v t) = Lam v' <$> substitute v (Var v') t
@@ -40,5 +40,3 @@ etaContract :: Term -> Maybe Term
 etaContract (Lam v (t :% Var v')) 
     | v == v' && not (v `Set.member` freeVars t) = Just t
 etaContract _ = Nothing
-
-
