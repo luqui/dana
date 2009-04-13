@@ -47,7 +47,7 @@ showTerm = go False False
     where
     go pa pl (Lam v t) = parens pl $ "\\" ++ v ++ ". " ++ go False False t
     go pa pl (Var v) = v
-    go pa pl (t :% u) = go False True t ++ " " ++ go True True u
+    go pa pl (t :% u) = parens pa $ go False True t ++ " " ++ go True True u
     go pa pl H = "H"
     go pa pl Xi = "X"
 
