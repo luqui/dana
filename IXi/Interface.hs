@@ -13,6 +13,7 @@ import Data.List (isPrefixOf)
 import qualified System.Console.Editline as EL
 import System.Exit (exitSuccess)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Binary
 import Data.DeriveTH
 import Data.Derive.Binary
@@ -152,8 +153,15 @@ define s = do
                 then liftIO $ putStrLn "Already defined"
                 else case parseTerm (chomp def) of
                         Nothing -> liftIO $ putStrLn "Parse error"
-                        Just term -> lift (U.put (cx { cxDefs = Map.insert varname term (cxDefs cx) }))
+                        Just term | varname `Set.member` Set.unions (map seqFree (cxSeqs cx)) -> 
+                                        liftIO $ putStrLn "Cannot define a free symbol"
+                                  | not (Set.null (freeVars term `Set.difference` Map.keysSet (cxDefs cx))) ->
+                                        liftIO $ putStrLn "Definition has free variables"
+                                  | otherwise ->
+                                        lift (U.put (cx { cxDefs = Map.insert varname term (cxDefs cx) }))
         _ -> liftIO $ putStrLn "Parse error"
+
+seqFree (hyps :|- goal) = Set.unions (map freeVars (goal:hyps))
 
 unfold :: String -> InterfaceM ()
 unfold s = do
