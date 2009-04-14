@@ -1,6 +1,7 @@
-module IXi.Parser (parseTerm, showTerm) where
+module IXi.Parser (parseTerm, showTerm, showDTerm) where
 
 import IXi.Term
+import IXi.TermZipper
 import Text.ParserCombinators.ReadP
 import Control.Applicative
 import Control.Monad (ap, guard)
@@ -29,7 +30,7 @@ parseH = (ident `suchThat` (== "H")) *> pure H
 atom = choice [ var
               , parseX
               , parseH
-              , char '(' *> expr <* char ')'
+              , tok (char '(') *> expr <* tok (char ')')
               ]
 
 lambda = Lam <$> (tok (char '\\') *> varName) <*> (tok (char '.') *> expr)
@@ -53,3 +54,20 @@ showTerm = go False False
 
     parens True = \x -> "(" ++ x ++ ")"
     parens False = id
+
+
+showDTerm :: DTerm -> String -> String
+showDTerm DTop s = s
+showDTerm (DLam v cx) s = showDTerm cx $
+    case cx of
+        DLam {} -> w
+        DTop {} -> w
+        DAppL {} -> "(" ++ w ++ ")"
+        DAppR {} -> "(" ++ w ++ ")"
+    where w = "\\" ++ v ++ ". " ++ s
+showDTerm (DAppL cx r) s = showDTerm cx $
+    case cx of
+        DAppR {} -> "(" ++ w ++ ")"
+        _ -> w
+    where w = s ++ " " ++ showTerm r
+showDTerm (DAppR l cx) s = showDTerm cx (showTerm l ++ " " ++ s)

@@ -3,6 +3,7 @@ module IXi.Interface where
 import IXi.Term
 import IXi.Parser
 import IXi.Sequent
+import IXi.TermZipper
 import Control.Monad.State
 import Control.Monad.Reader
 import Control.Applicative
@@ -66,7 +67,11 @@ loop = do
                 "wf" --> \_ -> tactic wfwf,
                 "define" --> define,
                 "unfold" --> unfold,
-                "pose" --> pose
+                "pose" --> pose,
+                "edit" --> \_ -> 
+                    let hyps :|- goal = s in do
+                         goal' <- editTerm goal
+                         put (cx { cxSeqs = (hyps :|- goal'):ss })
               ]
             loop
     where
@@ -117,3 +122,24 @@ pose s = do
             cx <- get
             let ((hyps :|- g) : ss) = cxSeqs cx
             put (cx { cxSeqs = (hyps :|- goal) : ((goal : hyps) :|- g) : ss })
+
+edit :: TermZipper -> InterfaceM TermZipper
+edit tz@(TermZipper t cx) = do
+    liftIO . putStrLn $ showDTerm cx ("[" ++ showTerm t ++ "]")
+    askLine >>= cmds invalid [
+        "h" --> \_ -> subedit goLeftApp,
+        "l" --> \_ -> subedit goRightApp,
+        "j" --> \_ -> subedit goLambda,
+        "k" --> \_ -> subedit goUp,
+        "q" --> \_ -> return tz
+      ]
+    where
+    subedit motion =
+        case motion tz of
+            Just newz -> edit newz
+            Nothing -> liftIO (putStrLn "Invalid motion") >> edit tz
+    invalid = liftIO (putStrLn "Invalid command") >> edit tz
+    (-->) = (,)
+
+editTerm :: Term -> InterfaceM Term
+editTerm t = termUnzip <$> edit (TermZipper t DTop)

@@ -40,3 +40,6 @@ etaContract :: Term -> Maybe Term
 etaContract (Lam v (t :% Var v')) 
     | v == v' && not (v `Set.member` freeVars t) = Just t
 etaContract _ = Nothing
+
+
+
