@@ -75,6 +75,7 @@ loop = do
 
 main = do
     el <- EL.elInit "ixi"
+    EL.setEditor el EL.Emacs
     evalStateT (runReaderT loop el) (Context { cxSeqs = [ [] :|- Xi :% H :% H ], cxDefs = Map.empty })
 
 tactic :: Tactic -> InterfaceM ()
