@@ -125,9 +125,15 @@ pose s = do
             let ((hyps :|- g) : ss) = cxSeqs cx
             lift (put (cx { cxSeqs = (hyps :|- goal) : ((goal : hyps) :|- g) : ss }))
 
+showZipper (TermZipper t cx) = showDTerm cx subterm
+    where
+    subterm | needsParens cx t = "(" ++ bold (showTerm t) ++ ")"
+            | otherwise        = bold (showTerm t)
+
 edit :: TermZipper -> InterfaceM TermZipper
-edit tz@(TermZipper t cx) = do
-    liftIO . putStrLn $ showDTerm cx (bold (showTerm t))
+edit tz = do
+    liftIO . putStr $ clearScreen
+    liftIO . putStrLn $ showZipper tz
     askLine >>= cmds invalid [
         "h" --> \_ -> subedit goLeftApp,
         "l" --> \_ -> subedit goRightApp,
@@ -151,7 +157,7 @@ editTerm t = termUnzip <$> edit (TermZipper t DTop)
 
 
 bold :: String -> String
-bold s = "\27[1m" ++ s ++ "\27[0m"
+bold s = "\27[1;31m" ++ s ++ "\27[0m"
 
 clearScreen :: String
 clearScreen = "\27[2J\27[0;0H"

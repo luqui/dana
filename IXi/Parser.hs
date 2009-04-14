@@ -1,4 +1,4 @@
-module IXi.Parser (parseTerm, showTerm, showDTerm) where
+module IXi.Parser (parseTerm, showTerm, showDTerm, needsParens) where
 
 import IXi.Term
 import IXi.TermZipper
@@ -71,3 +71,10 @@ showDTerm (DAppL cx r) s = showDTerm cx $
         _ -> w
     where w = s ++ " " ++ showTerm r
 showDTerm (DAppR l cx) s = showDTerm cx (showTerm l ++ " " ++ s)
+
+
+needsParens :: DTerm -> Term -> Bool
+needsParens (DAppL {}) (Lam {}) = True
+needsParens (DAppR {}) (Lam {}) = True
+needsParens (DAppR {}) ((:%) {}) = True
+needsParens _ _ = False
