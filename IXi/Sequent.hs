@@ -1,16 +1,22 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module IXi.Sequent where
 
 import qualified Data.Set as Set
 import IXi.Term
 import Control.Monad.Error ()
+import Data.Binary
+import Data.DeriveTH
+import Data.Derive.Binary
+import Control.Monad
 
 infix 1 :|-
 
 data Sequent = [Term] :|- Term
 
-data Proof = Proof Term [Sequent]
-
 type Tactic = Sequent -> Either String [Sequent]
+
+$(derive makeBinary ''Sequent)
 
 
 assumption :: Tactic

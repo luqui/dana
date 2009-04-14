@@ -1,7 +1,13 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module IXi.Term where
 
 import qualified Data.Set as Set
 import Control.Applicative
+import Data.DeriveTH
+import Data.Derive.Binary
+import Data.Binary
+import Control.Monad
 
 type Var = String
 
@@ -12,6 +18,8 @@ data Term
     | Term :% Term
     | H | Xi
     deriving (Eq, Ord)
+
+$( derive makeBinary ''Term )
 
 freeVars :: Term -> Set.Set Var
 freeVars (Lam v t) = Set.delete v (freeVars t)
@@ -41,6 +49,4 @@ etaContract :: Term -> Maybe Term
 etaContract (Lam v (t :% Var v')) 
     | v == v' && not (v `Set.member` freeVars t) = Just t
 etaContract _ = Nothing
-
-
 

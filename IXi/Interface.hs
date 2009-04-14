@@ -1,16 +1,25 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module IXi.Interface where
 
 import IXi.Term
 import IXi.Parser
 import IXi.Sequent
 import IXi.TermZipper
-import IXi.Undo
+import qualified IXi.Undo as U
 import Control.Monad.Reader
 import Control.Applicative
 import Data.List (isPrefixOf)
 import qualified System.Console.Editline as EL
 import System.Exit (exitSuccess)
 import qualified Data.Map as Map
+import Data.Binary
+import Data.DeriveTH
+import Data.Derive.Binary
+import qualified Data.ByteString.Lazy as Str
+import System.Environment
+import Data.Function
+import Control.Exception (handle)
 
 dispSequent :: Sequent -> IO ()
 dispSequent (cx :|- goal) = do
@@ -24,16 +33,27 @@ showSequent (cx :|- goal) = "... |- " ++ showTerm goal
 showDef :: (Var,Term) -> String
 showDef (v,t) = v ++ " = " ++ showTerm t
 
-type InterfaceM = ReaderT EL.EditLine (UndoT Context IO)
+type InterfaceM = ReaderT EL.EditLine (U.UndoT Context IO)
 
 data Context = Context { cxSeqs :: [Sequent], cxDefs :: Map.Map Var Term }
 
+$(derive makeBinary ''Context)
+
 askLine :: InterfaceM String
-askLine = do
-    l <- liftIO . EL.elGets =<< ask
+askLine = liftIO . askLine' =<< ask
+
+clAskLine = do
+    l <- askLine
+    liftIO $ putStr clearScreen
+    return l
+
+askLine' :: EL.EditLine -> IO String
+askLine' el = do
+    l <- EL.elGets el
     case l of
         Nothing -> liftIO exitSuccess
         Just r -> return (init r)
+    
 
 chomp :: String -> String
 chomp = reverse . dropWhile (== ' ') . reverse . dropWhile (== ' ')
@@ -46,21 +66,27 @@ cmds :: a -> [(String, String -> a)] -> String -> a
 cmds def [] _ = def
 cmds def ((name, f):rest) inp = maybe (cmds def rest inp) f $ cmd1 name inp
 
+save :: FilePath -> InterfaceM ()
+save path = do
+    cx <- lift U.get
+    liftIO . handle (\x -> print (x :: IOError)) $ do
+        Str.writeFile path (encode cx)
+        putStrLn $ "Saved to " ++ path
+
 loop :: InterfaceM ()
 loop = do
-    lift save
-    cx  <- lift get
+    lift U.save
+    cx  <- lift U.get
     case cxSeqs cx of
         [] -> return ()
         (s:ss) -> do
-            liftIO $ putStr clearScreen
             mapM_ (liftIO . putStrLn . showDef) (Map.assocs (cxDefs cx))
             liftIO $ putStrLn ""
             mapM_ (liftIO . putStrLn . showSequent) ss
             liftIO $ putStrLn ""
             liftIO $ dispSequent s
-            askLine >>= cmds invalid [
-                "rotate" --> \_ -> lift (put (cx { cxSeqs = ss ++ [s] })),
+            clAskLine >>= cmds invalid [
+                "rotate" --> \_ -> lift (U.put (cx { cxSeqs = ss ++ [s] })),
                 "assumption" --> \_ -> tactic assumption,
                 "mp" --> \t -> maybe invalid (tactic . modusPonens) (parseTerm t),
                 "abstract" --> \v -> tactic (abstract v),
@@ -72,8 +98,9 @@ loop = do
                 "edit" --> \_ -> 
                     let hyps :|- goal = s in do
                          goal' <- editTerm goal
-                         lift (put (cx { cxSeqs = (hyps :|- goal'):ss })),
-                "undo" --> \_ -> lift (undo >> undo)
+                         lift (U.put (cx { cxSeqs = (hyps :|- goal'):ss })),
+                "undo" --> \_ -> lift (U.undo >> U.undo),
+                "save" --> save
               ]
             loop
     where
@@ -83,14 +110,28 @@ loop = do
 main = do
     el <- EL.elInit "ixi"
     EL.setEditor el EL.Emacs
-    evalUndoT (runReaderT loop el) (Context { cxSeqs = [ [] :|- Xi :% H :% H ], cxDefs = Map.empty })
+
+    cx <- do
+        args <- getArgs
+        case args of
+            [] -> fix $ \self -> do
+                putStrLn "Enter Goal"
+                s <- askLine' el
+                case parseTerm s of
+                    Just t -> return $ Context { cxSeqs = [ [] :|- t ], cxDefs = Map.empty }
+                    Nothing -> putStrLn "Parse error" >> self
+            [file] -> decode <$> Str.readFile file
+                
+    putStr clearScreen
+    U.evalUndoT (runReaderT loop el) cx
+    putStrLn "No more goals.  Success!"
 
 tactic :: Tactic -> InterfaceM ()
 tactic tac = do
-    cx <- lift get
+    cx <- lift U.get
     let (s:ss) = cxSeqs cx
     case tac s of
-        Right new -> lift (put (cx { cxSeqs = new ++ ss }))
+        Right new -> lift (U.put (cx { cxSeqs = new ++ ss }))
         Left err -> liftIO $ putStrLn err  
 
 define :: String -> InterfaceM ()
@@ -98,32 +139,32 @@ define s = do
     let varname = takeWhile (/= ' ') s
     case dropWhile (/= ' ') s of
         (' ':'=':def) -> do
-            cx <- lift get
+            cx <- lift U.get
             if varname `Map.member` cxDefs cx
                 then liftIO $ putStrLn "Already defined"
                 else case parseTerm (chomp def) of
                         Nothing -> liftIO $ putStrLn "Parse error"
-                        Just term -> lift (put (cx { cxDefs = Map.insert varname term (cxDefs cx) }))
+                        Just term -> lift (U.put (cx { cxDefs = Map.insert varname term (cxDefs cx) }))
         _ -> liftIO $ putStrLn "Parse error"
 
 unfold :: String -> InterfaceM ()
 unfold s = do
-    cx <- lift get
+    cx <- lift U.get
     let ((hyps :|- goal) : ss) = cxSeqs cx
     case Map.lookup s (cxDefs cx) of
         Nothing -> liftIO $ putStrLn "No such definition"
         Just def -> case substitute s def goal of
                         Nothing -> liftIO $ putStrLn "Substitute failed"
-                        Just t' -> lift (put (cx { cxSeqs = (hyps :|- t'):ss }))
+                        Just t' -> lift (U.put (cx { cxSeqs = (hyps :|- t'):ss }))
 
 pose :: String -> InterfaceM ()
 pose s = do
     case parseTerm s of
         Nothing -> liftIO $ putStrLn "Parse error"
         Just goal -> do
-            cx <- lift get
+            cx <- lift U.get
             let ((hyps :|- g) : ss) = cxSeqs cx
-            lift (put (cx { cxSeqs = (hyps :|- goal) : ((goal : hyps) :|- g) : ss }))
+            lift (U.put (cx { cxSeqs = (hyps :|- goal) : ((goal : hyps) :|- g) : ss }))
 
 showZipper (TermZipper t cx) = showDTerm cx subterm
     where
@@ -134,7 +175,7 @@ edit :: TermZipper -> InterfaceM TermZipper
 edit tz = do
     liftIO . putStr $ clearScreen
     liftIO . putStrLn $ showZipper tz
-    askLine >>= cmds invalid [
+    clAskLine >>= cmds invalid [
         "h" --> \_ -> subedit goLeftApp,
         "l" --> \_ -> subedit goRightApp,
         "j" --> \_ -> subedit goLambda,
