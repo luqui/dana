@@ -102,6 +102,11 @@ loop = do
                 "define" --> define,
                 "unfold" --> unfold,
                 "pose" --> pose,
+                "edith" --> \n ->
+                    let idx = read n
+                        hyps :|- goal = s in do
+                           h' <- editTerm (hyps !! idx)
+                           lift (U.put (cx { cxSeqs = ((take idx hyps ++ [h'] ++ drop (idx+1) hyps) :|- goal):ss })),
                 "edit" --> \_ -> 
                     let hyps :|- goal = s in do
                          goal' <- editTerm goal
@@ -202,7 +207,9 @@ edit tz = do
         "beta" --> \_ -> subedit (inZipperM betaExpand),
         "alpha" --> \v -> subedit (inZipperM (alphaRename v)),
         "eta" --> \_ -> subedit (inZipperM etaContract),
-        "unfold" --> unfoldE
+        "unfold" --> unfoldE,
+        "fold" --> foldE,
+        "abs" --> (uncurry absE . splitWord)
       ]
     where
     subedit motion =
@@ -215,8 +222,32 @@ edit tz = do
         case Map.lookup v dict of
             Nothing -> liftIO (putStrLn "No such definition") >> edit tz
             Just def -> subedit (inZipperM (substitute v def))
-                
+    
+    foldE v = do
+        dict <- fmap cxDefs (lift U.get)
+        case Map.lookup v dict of
+            Nothing -> liftIO (putStrLn "No such definition") >> edit tz
+            Just def | term == def -> edit (TermZipper (Var v) context)
+                     | otherwise -> liftIO (putStrLn "Definition does not match") >> edit tz
+      
+    TermZipper term context = tz
+
+    absE v t | null v || not (all Char.isAlphaNum v) = liftIO (putStrLn "Invalid identifier") >> edit tz
+             | otherwise = do
+                cx <- lift U.get
+                case parseTerm t of
+                    Nothing -> (liftIO $ putStrLn "Parse Error") >> edit tz
+                    Just tt -> do
+                        lift $ U.put (cx { cxDefs = Map.insert v tt (cxDefs cx) })
+                        t' <- editTerm term
+                        lift $ U.put cx
+                        edit (TermZipper (Lam v t' :% tt) context)
+        
+              
     (-->) = (,)
+
+splitWord :: String -> (String, String)
+splitWord s = (takeWhile Char.isAlphaNum s, chomp (dropWhile Char.isAlphaNum s))
 
 editTerm :: Term -> InterfaceM Term
 editTerm t = termUnzip <$> edit (TermZipper t DTop)
