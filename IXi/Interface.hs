@@ -20,6 +20,7 @@ import qualified Data.ByteString.Lazy as Str
 import System.Environment
 import Data.Function
 import Control.Exception (handle)
+import qualified Data.Char as Char
 
 dispSequent :: Sequent -> IO ()
 dispSequent (cx :|- goal) = do
@@ -89,8 +90,8 @@ loop = do
                 "rotate" --> \_ -> lift (U.put (cx { cxSeqs = ss ++ [s] })),
                 "assumption" --> \_ -> tactic assumption,
                 "mp" --> \t -> maybe invalid (tactic . modusPonens) (parseTerm t),
-                "abstract" --> \v -> tactic (abstract v),
-                "abswf" --> \v -> tactic (univWF v),
+                "abstract" --> ident (tactic . abstract),
+                "abswf" --> ident (tactic . univWF),
                 "wf" --> \_ -> tactic wfwf,
                 "define" --> define,
                 "unfold" --> unfold,
@@ -106,6 +107,8 @@ loop = do
     where
     (-->) = (,)
     invalid = liftIO $ putStrLn "Invalid input"
+    ident c v | all Char.isAlphaNum v && not (null v) = c v
+              | otherwise = liftIO $ putStrLn "Not a valid identifier"
 
 main = do
     el <- EL.elInit "ixi"
