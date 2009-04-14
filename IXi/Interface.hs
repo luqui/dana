@@ -53,7 +53,7 @@ loop = do
     case cxSeqs cx of
         [] -> return ()
         (s:ss) -> do
-            mapM_ (const (liftIO (putStrLn ""))) [1..5]
+            liftIO $ putStr clearScreen
             mapM_ (liftIO . putStrLn . showDef) (Map.assocs (cxDefs cx))
             liftIO $ putStrLn ""
             mapM_ (liftIO . putStrLn . showSequent) ss
@@ -127,7 +127,7 @@ pose s = do
 
 edit :: TermZipper -> InterfaceM TermZipper
 edit tz@(TermZipper t cx) = do
-    liftIO . putStrLn $ showDTerm cx ("[" ++ showTerm t ++ "]")
+    liftIO . putStrLn $ showDTerm cx (bold (showTerm t))
     askLine >>= cmds invalid [
         "h" --> \_ -> subedit goLeftApp,
         "l" --> \_ -> subedit goRightApp,
@@ -148,3 +148,10 @@ edit tz@(TermZipper t cx) = do
 
 editTerm :: Term -> InterfaceM Term
 editTerm t = termUnzip <$> edit (TermZipper t DTop)
+
+
+bold :: String -> String
+bold s = "\27[1m" ++ s ++ "\27[0m"
+
+clearScreen :: String
+clearScreen = "\27[2J\27[0;0H"
