@@ -11,7 +11,7 @@ data Term
     | Var String
     | Term :% Term
     | H | Xi
-    deriving (Eq)
+    deriving (Eq, Ord)
 
 freeVars :: Term -> Set.Set Var
 freeVars (Lam v t) = Set.delete v (freeVars t)

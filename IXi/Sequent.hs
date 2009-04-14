@@ -39,3 +39,5 @@ wfwf :: Tactic
 wfwf (cx :|- H :% (H :% x)) = return []
 wfwf _ = fail "wfwf must operate on the goal H(HX)"
 
+subSequent :: Sequent -> Sequent -> Bool
+subSequent (hyps :|- g) (hyps' :|- g') = g == g' && (Set.fromList hyps' `Set.isSubsetOf` Set.fromList hyps)
