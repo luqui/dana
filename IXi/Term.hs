@@ -35,6 +35,7 @@ alphaRename _ _ = Nothing
 
 betaExpand :: Term -> Maybe Term
 betaExpand (Lam v t :% u) = substitute v u t
+betaExpand _ = Nothing
 
 etaContract :: Term -> Maybe Term
 etaContract (Lam v (t :% Var v')) 

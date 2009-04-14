@@ -4,7 +4,7 @@ import IXi.Term
 import IXi.Parser
 import IXi.Sequent
 import IXi.TermZipper
-import Control.Monad.State
+import IXi.Undo
 import Control.Monad.Reader
 import Control.Applicative
 import Data.List (isPrefixOf)
@@ -24,7 +24,7 @@ showSequent (cx :|- goal) = "... |- " ++ showTerm goal
 showDef :: (Var,Term) -> String
 showDef (v,t) = v ++ " = " ++ showTerm t
 
-type InterfaceM = ReaderT EL.EditLine (StateT Context IO)
+type InterfaceM = ReaderT EL.EditLine (UndoT Context IO)
 
 data Context = Context { cxSeqs :: [Sequent], cxDefs :: Map.Map Var Term }
 
@@ -48,7 +48,8 @@ cmds def ((name, f):rest) inp = maybe (cmds def rest inp) f $ cmd1 name inp
 
 loop :: InterfaceM ()
 loop = do
-    cx  <- get
+    lift save
+    cx  <- lift get
     case cxSeqs cx of
         [] -> return ()
         (s:ss) -> do
@@ -59,7 +60,7 @@ loop = do
             liftIO $ putStrLn ""
             liftIO $ dispSequent s
             askLine >>= cmds invalid [
-                "rotate" --> \_ -> put (cx { cxSeqs = ss ++ [s] }),
+                "rotate" --> \_ -> lift (put (cx { cxSeqs = ss ++ [s] })),
                 "assumption" --> \_ -> tactic assumption,
                 "mp" --> \t -> maybe invalid (tactic . modusPonens) (parseTerm t),
                 "abstract" --> \v -> tactic (abstract v),
@@ -71,7 +72,8 @@ loop = do
                 "edit" --> \_ -> 
                     let hyps :|- goal = s in do
                          goal' <- editTerm goal
-                         put (cx { cxSeqs = (hyps :|- goal'):ss })
+                         lift (put (cx { cxSeqs = (hyps :|- goal'):ss })),
+                "undo" --> \_ -> lift (undo >> undo)
               ]
             loop
     where
@@ -81,14 +83,14 @@ loop = do
 main = do
     el <- EL.elInit "ixi"
     EL.setEditor el EL.Emacs
-    evalStateT (runReaderT loop el) (Context { cxSeqs = [ [] :|- Xi :% H :% H ], cxDefs = Map.empty })
+    evalUndoT (runReaderT loop el) (Context { cxSeqs = [ [] :|- Xi :% H :% H ], cxDefs = Map.empty })
 
 tactic :: Tactic -> InterfaceM ()
 tactic tac = do
-    cx <- get
+    cx <- lift get
     let (s:ss) = cxSeqs cx
     case tac s of
-        Right new -> put (cx { cxSeqs = new ++ ss })
+        Right new -> lift (put (cx { cxSeqs = new ++ ss }))
         Left err -> liftIO $ putStrLn err  
 
 define :: String -> InterfaceM ()
@@ -96,32 +98,32 @@ define s = do
     let varname = takeWhile (/= ' ') s
     case dropWhile (/= ' ') s of
         (' ':'=':def) -> do
-            cx <- get
+            cx <- lift get
             if varname `Map.member` cxDefs cx
                 then liftIO $ putStrLn "Already defined"
                 else case parseTerm (chomp def) of
                         Nothing -> liftIO $ putStrLn "Parse error"
-                        Just term -> put (cx { cxDefs = Map.insert varname term (cxDefs cx) })
+                        Just term -> lift (put (cx { cxDefs = Map.insert varname term (cxDefs cx) }))
         _ -> liftIO $ putStrLn "Parse error"
 
 unfold :: String -> InterfaceM ()
 unfold s = do
-    cx <- get
+    cx <- lift get
     let ((hyps :|- goal) : ss) = cxSeqs cx
     case Map.lookup s (cxDefs cx) of
         Nothing -> liftIO $ putStrLn "No such definition"
         Just def -> case substitute s def goal of
                         Nothing -> liftIO $ putStrLn "Substitute failed"
-                        Just t' -> put (cx { cxSeqs = (hyps :|- t'):ss })
+                        Just t' -> lift (put (cx { cxSeqs = (hyps :|- t'):ss }))
 
 pose :: String -> InterfaceM ()
 pose s = do
     case parseTerm s of
         Nothing -> liftIO $ putStrLn "Parse error"
         Just goal -> do
-            cx <- get
+            cx <- lift get
             let ((hyps :|- g) : ss) = cxSeqs cx
-            put (cx { cxSeqs = (hyps :|- goal) : ((goal : hyps) :|- g) : ss })
+            lift (put (cx { cxSeqs = (hyps :|- goal) : ((goal : hyps) :|- g) : ss }))
 
 edit :: TermZipper -> InterfaceM TermZipper
 edit tz@(TermZipper t cx) = do
@@ -131,7 +133,10 @@ edit tz@(TermZipper t cx) = do
         "l" --> \_ -> subedit goRightApp,
         "j" --> \_ -> subedit goLambda,
         "k" --> \_ -> subedit goUp,
-        "q" --> \_ -> return tz
+        "q" --> \_ -> return tz,
+        "beta" --> \_ -> subedit (inZipperM betaExpand),
+        "alpha" --> \v -> subedit (inZipperM (alphaRename v)),
+        "eta" --> \_ -> subedit (inZipperM etaContract)
       ]
     where
     subedit motion =

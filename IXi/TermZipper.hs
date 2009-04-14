@@ -32,3 +32,9 @@ goUp (TermZipper t (DAppR x cx)) = Just (TermZipper (x :% t) cx)
 
 termUnzip :: TermZipper -> Term
 termUnzip tz = maybe (tzFocus tz) termUnzip (goUp tz)
+
+inZipper :: (Term -> Term) -> TermZipper -> TermZipper
+inZipper f (TermZipper t cx) = TermZipper (f t) cx
+
+inZipperM :: (Term -> Maybe Term) -> Motion
+inZipperM f (TermZipper t cx) = fmap (\r -> TermZipper r cx) (f t)
