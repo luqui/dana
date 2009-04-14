@@ -74,6 +74,11 @@ save path = do
         Str.writeFile path (encode cx)
         putStrLn $ "Saved to " ++ path
 
+showDefs :: InterfaceM ()
+showDefs = do
+    cx <- lift U.get
+    mapM_ (liftIO . putStrLn . showDef) (Map.assocs (cxDefs cx))
+
 loop :: InterfaceM ()
 loop = do
     lift U.save
@@ -81,7 +86,7 @@ loop = do
     case cxSeqs cx of
         [] -> return ()
         (s:ss) -> do
-            mapM_ (liftIO . putStrLn . showDef) (Map.assocs (cxDefs cx))
+            showDefs
             liftIO $ putStrLn ""
             mapM_ (liftIO . putStrLn . showSequent) ss
             liftIO $ putStrLn ""
@@ -177,6 +182,8 @@ showZipper (TermZipper t cx) = showDTerm cx subterm
 edit :: TermZipper -> InterfaceM TermZipper
 edit tz = do
     liftIO . putStr $ clearScreen
+    showDefs
+    liftIO . putStrLn $ ""
     liftIO . putStrLn $ showZipper tz
     clAskLine >>= cmds invalid [
         "h" --> \_ -> subedit goLeftApp,
@@ -186,7 +193,8 @@ edit tz = do
         "q" --> \_ -> return tz,
         "beta" --> \_ -> subedit (inZipperM betaExpand),
         "alpha" --> \v -> subedit (inZipperM (alphaRename v)),
-        "eta" --> \_ -> subedit (inZipperM etaContract)
+        "eta" --> \_ -> subedit (inZipperM etaContract),
+        "unfold" --> unfoldE
       ]
     where
     subedit motion =
@@ -194,6 +202,12 @@ edit tz = do
             Just newz -> edit newz
             Nothing -> liftIO (putStrLn "Invalid motion") >> edit tz
     invalid = liftIO (putStrLn "Invalid command") >> edit tz
+    unfoldE v = do
+        dict <- fmap cxDefs (lift U.get)
+        case Map.lookup v dict of
+            Nothing -> liftIO (putStrLn "No such definition") >> edit tz
+            Just def -> subedit (inZipperM (substitute v def))
+                
     (-->) = (,)
 
 editTerm :: Term -> InterfaceM Term

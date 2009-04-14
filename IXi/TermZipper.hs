@@ -1,6 +1,7 @@
 module IXi.TermZipper where
 
 import IXi.Term
+import qualified Data.Set as Set
 
 data DTerm
     = DTop
@@ -38,3 +39,9 @@ inZipper f (TermZipper t cx) = TermZipper (f t) cx
 
 inZipperM :: (Term -> Maybe Term) -> Motion
 inZipperM f (TermZipper t cx) = fmap (\r -> TermZipper r cx) (f t)
+
+boundVars :: DTerm -> Set.Set Var
+boundVars DTop = Set.empty
+boundVars (DLam v t) = Set.insert v (boundVars t)
+boundVars (DAppL cx t) = boundVars cx
+boundVars (DAppR t cx) = boundVars cx

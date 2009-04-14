@@ -3,6 +3,7 @@
 module IXi.Term where
 
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 import Control.Applicative
 import Data.DeriveTH
 import Data.Derive.Binary
@@ -50,3 +51,14 @@ etaContract (Lam v (t :% Var v'))
     | v == v' && not (v `Set.member` freeVars t) = Just t
 etaContract _ = Nothing
 
+alphaEquiv :: Term -> Term -> Bool
+alphaEquiv = go Map.empty Map.empty 0
+    where
+    go m m' count (Lam v t) (Lam v' t') = go (Map.insert v newv m) (Map.insert v' newv m') (count+1) t t'
+        where newv = "@" ++ show count
+    go m m' count (Var x) (Var y) = (not (x `Map.member` m) && not (y `Map.member` m'))
+                                 || (liftM2 (==) (Map.lookup x m) (Map.lookup y m') == Just True)
+    go m m' count (x :% y) (x' :% y') = go m m' count x y && go m m' count x' y'
+    go m m' count H H = True
+    go m m' count Xi Xi = True
+    go m m' count _ _ = False
