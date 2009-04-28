@@ -1,6 +1,6 @@
 module IXi.Proof 
     ( Proof
-    , hypothesis, conversion
+    , hypothesis, conversion, hypConversion
     , implRule, xiRule, hxiRule, hhRule
     , theorem
     , Theorem, thmStatement, prove
@@ -36,18 +36,20 @@ hypothesis n = Proof $ do
     assert (n < length hyp) "Hypothesis index out of range"
     assert (hyp !! n == goal) "Hypothesis does not match goal"
 
-conversion :: (Eq n) => Conversion n -> Proof n -> Proof n
+conversion :: Conversion n -> Proof n -> Proof n
 conversion conv pf = Proof $ do
     goal <- asks cxGoal
-    assert (goal == convFrom conv) $ "Goal does not match source of conversion"
-    subgoal [] (convTo conv) pf
+    case convert conv goal of
+        Just goal' -> subgoal [] goal' pf
+        Nothing -> fail "Conversion failed"
 
-hypConversion :: (Eq n) => Int -> Conversion n -> Proof n -> Proof n
+hypConversion :: Int -> Conversion n -> Proof n -> Proof n
 hypConversion n conv pf = Proof $ do
     hyps <- asks cxHyps
     assert (n < length hyps) $ "Hypothesis index out of range"
-    assert (hyps !! n == convFrom conv)
-    local (\s -> s { cxHyps = take n hyps ++ [convTo conv] ++ drop (n+1) hyps }) (checkProof pf)
+    case convert conv (hyps !! n) of
+        Just hyp' -> local (\s -> s { cxHyps = take n hyps ++ [hyp'] ++ drop (n+1) hyps }) (checkProof pf)
+        Nothing -> fail "Conversion failed"
 
 subgoal :: [Term n] -> Term n -> Proof n -> ProofM n ()
 subgoal hyps goal = local (\s -> s { cxGoal = goal, cxHyps = hyps ++ cxHyps s }) . checkProof
@@ -97,15 +99,18 @@ theorem (Theorem t) = Proof $ do
 
 newtype Theorem = Theorem (forall n. Term n)
 
+instance Show Theorem where
+    show (Theorem t) = "|- " ++ show (t :: Term ())
+
 thmStatement :: Theorem -> Term n
 thmStatement (Theorem t) = t
 
-prove :: (forall n. Term n, forall n. Eq n => Proof n) -> Either String Theorem
-prove (term,pf) = right (const (Theorem term)) 
-                . (`runReader` Context term [])
-                . (`evalStateT` [0..])
-                . runErrorT
-                . checkProof $ pf
+prove :: (forall n. Term n) -> (forall n. Eq n => Proof n) -> Either String Theorem
+prove term pf = right (const (Theorem term)) 
+              . (`runReader` Context term [])
+              . (`evalStateT` [0..])
+              . runErrorT
+              . checkProof $ pf
 
 right :: (b -> c) -> Either a b -> Either a c
 right f (Left x) = Left x

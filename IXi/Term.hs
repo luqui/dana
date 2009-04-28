@@ -3,14 +3,20 @@ module IXi.Term
     , showTerm
     , quote, subst, substNamed
     , unfree, free, freeNames
-    , Conversion, convFrom, convTo
-    , convId, convSym, convTrans
-    , convBeta, convEta, convAppL, convAppR, convLambda
+
+    , Conversion, convert
+    , convId, convTrans
+    , convInLambda, convInAppL, convInAppR
+    , convEtaContract, convEtaExpand
+    , convBetaReduce
+    , convExpandI, convExpandK, convExpandS
     )
 where
 
 import Control.Applicative
 import Data.Maybe (isNothing)
+import Data.Monoid (Monoid(..))
+import Control.Monad ((>=>))
 import qualified Data.Set as Set
 
 infixl 9 :%
@@ -84,26 +90,47 @@ freeNames (NameVar n) = Set.singleton n
 freeNames _ = Set.empty
 
 
-data Conversion n = Term n :<-> Term n
+newtype Conversion n = Conversion { convert :: Term n -> Maybe (Term n) }
 
-convFrom (a :<-> b) = a
-convTo (a :<-> b) = b
+instance Monoid (Conversion n) where
+    mempty = convId
+    mappend = convTrans
 
-convId t = t :<-> t
+convId = Conversion Just
+convTrans f g = Conversion (convert f >=> convert g)
 
-convSym (a :<-> b) = b :<-> a
+convInLambda conv = Conversion $ \t ->
+    case t of
+        Lambda t' -> Lambda <$> convert conv t'
+        _ -> Nothing
 
-convTrans (a :<-> b) (b' :<-> c)
-    | b == b'   = Just (a :<-> c)
-    | otherwise = Nothing
+convInAppL conv = Conversion $ \t ->
+    case t of
+        a :% b -> (:% b) <$> convert conv a
+        _ -> Nothing
 
-convBeta term@(Lambda t :% u) = Just (term :<-> subst 0 u t)
-convBeta _ = Nothing
+convInAppR conv = Conversion $ \t ->
+    case t of
+        a :% b -> (a :%) <$> convert conv b
+        _ -> Nothing
 
-convEta term = term :<-> Lambda (quote 0 term :% Var 0)
+convEtaContract = Conversion $ \t ->
+    case t of
+        Lambda (a :% Var 0) -> unfree 0 a
+        _ -> Nothing
 
-convAppL r (a :<-> b) = (a :% r) :<-> (b :% r)
+convEtaExpand = Conversion $ \t -> Just (Lambda (quote 0 t :% Var 0))
 
-convAppR l (a :<-> b) = (l :% a) :<-> (l :% b)
+convBetaReduce = Conversion $ \t ->
+    case t of
+        Lambda a :% b -> Just (subst 0 b a)
+        _ -> Nothing
 
-convLambda (a :<-> b) = Lambda a :<-> Lambda b
+convExpandI = Conversion $ \t -> Just (Lambda (Var 0) :% t)
+convExpandK y = Conversion $ \t -> Just (Lambda (Lambda (Var 1)) :% t :% y)
+
+convExpandS :: (Eq n) => Conversion n
+convExpandS = Conversion $ \t ->
+    case t of
+        x :% z :% (y :% z') | z == z' -> Just (Lambda (quote 0 x :% Var 0 :% (quote 0 y :% Var 0)) :% z)
+        _ -> Nothing
