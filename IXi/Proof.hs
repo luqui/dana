@@ -3,7 +3,7 @@ module IXi.Proof
     , hypothesis, conversion
     , implRule, xiRule, hxiRule, hhRule
     , theorem
-    , Theorem, prove
+    , Theorem, thmStatement, prove
     )
 where
 
@@ -89,6 +89,9 @@ theorem (Theorem t) = Proof $ do
     assert (goal == t) "Goal does not match theorem"
 
 newtype Theorem = Theorem (forall n. Term n)
+
+thmStatement :: Theorem -> Term n
+thmStatement (Theorem t) = t
 
 prove :: (forall n. Term n, forall n. Eq n => Proof n) -> Either String Theorem
 prove (term,pf) = right (const (Theorem term)) 
