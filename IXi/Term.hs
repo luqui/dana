@@ -1,5 +1,5 @@
 module IXi.Term 
-    ( Name(..), Term(..)
+    ( Term(..)
     , quote, subst, substNamed
     , unfree, free, freeNames
     , Conversion, convFrom, convTo
@@ -12,20 +12,17 @@ import Control.Applicative
 import Data.Maybe (isNothing)
 import qualified Data.Set as Set
 
-newtype Name = Name Integer
-    deriving (Eq,Ord)
-
 infixl 9 :%
-data Term
-    = Lambda Term
-    | Term :% Term
+data Term name
+    = Lambda (Term name)
+    | Term name :% Term name
     | Var Int
-    | NameVar Name
+    | NameVar name
     | Xi | H
     deriving (Eq,Ord)
 
 
-quote :: Int -> Term -> Term
+quote :: Int -> Term n -> Term n
 quote n (Lambda t) = Lambda (quote (n+1) t)
 quote n (a :% b) = quote n a :% quote n b
 quote n (Var v) | v < n     = Var v
@@ -33,7 +30,7 @@ quote n (Var v) | v < n     = Var v
 quote n other = other
 
 
-subst :: Int -> Term -> Term -> Term
+subst :: Int -> Term n -> Term n -> Term n
 subst n with (Lambda t) = Lambda (subst (n+1) (quote 0 with) t)
 subst n with (t :% u) = subst n with t :% subst n with u
 subst n with (Var v) =
@@ -43,14 +40,14 @@ subst n with (Var v) =
         GT -> Var (v-1)
 subst n with other = other
         
-substNamed :: Name -> Term -> Term -> Term
+substNamed :: (Eq n) => n -> Term n -> Term n -> Term n
 substNamed m with (Lambda t) = Lambda (substNamed m (quote 0 with) t)
 substNamed m with (a :% b) = substNamed m with a :% substNamed m with b
 substNamed m with (NameVar n) | m == n    = with
                               | otherwise = NameVar n
 substNamed m with other = other
 
-unfree :: Int -> Term -> Maybe Term
+unfree :: Int -> Term n -> Maybe (Term n)
 unfree n (Lambda t) = Lambda <$> unfree (n+1) t
 unfree n (t :% u) = liftA2 (:%) (unfree n t) (unfree n u)
 unfree n (Var v)
@@ -60,17 +57,17 @@ unfree n (Var v)
         GT -> Just (Var (v-1))
 unfree n z = Just z
 
-free :: Int -> Term -> Bool
+free :: Int -> Term n -> Bool
 free n t = isNothing (unfree n t)
 
-freeNames :: Term -> Set.Set Name
+freeNames :: (Ord n) => Term n -> Set.Set n
 freeNames (Lambda t) = freeNames t
 freeNames (t :% u) = freeNames t `Set.union` freeNames u
 freeNames (NameVar n) = Set.singleton n
 freeNames _ = Set.empty
 
 
-data Conversion = Term :<-> Term
+data Conversion n = Term n :<-> Term n
 
 convFrom (a :<-> b) = a
 convTo (a :<-> b) = b
