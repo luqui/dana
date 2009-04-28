@@ -4,7 +4,7 @@ module IXi.Term
     , unfree, free, freeNames
     , Conversion, convFrom, convTo
     , convId, convSym, convTrans
-    , convBeta, convEta
+    , convBeta, convEta, convAppL, convAppR
     )
 where
 
@@ -84,3 +84,7 @@ convBeta term@(Lambda t :% u) = Just (term :<-> subst 0 u t)
 convBeta _ = Nothing
 
 convEta term = term :<-> Lambda (quote 0 term :% Var 0)
+
+convAppL (a :<-> b) r = (a :% r) :<-> (b :% r)
+
+convAppR l (a :<-> b) = (l :% a) :<-> (l :% b)
