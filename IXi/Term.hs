@@ -5,7 +5,7 @@ module IXi.Term
     , unfree, free, freeNames
     , Conversion, convFrom, convTo
     , convId, convSym, convTrans
-    , convBeta, convEta, convAppL, convAppR
+    , convBeta, convEta, convAppL, convAppR, convLambda
     )
 where
 
@@ -22,17 +22,20 @@ data Term name
     | Xi | H
     deriving (Eq,Ord)
 
+instance (Show name) => Show (Term name) where
+    show = showTerm show
+
 showTerm :: (name -> String) -> Term name -> String
 showTerm namefunc = go False False
     where
     go ap lp (Lambda t) = parens lp $ "\\. " ++ go False False t
-    go ap lp (t :% u) = parens ap $ showTerm False True t ++ " " ++ showTerm True True u
+    go ap lp (t :% u) = parens ap $ go False True t ++ " " ++ go True True u
     go ap lp (Var z) = show z
     go ap lp (NameVar n) = namefunc n
     go ap lp Xi = "Xi"
     go ap lp H = "H"
 
-    parens True = \x. "(" ++ x ++ ")"
+    parens True = \x -> "(" ++ x ++ ")"
     parens False = id
 
 
@@ -102,3 +105,5 @@ convEta term = term :<-> Lambda (quote 0 term :% Var 0)
 convAppL (a :<-> b) r = (a :% r) :<-> (b :% r)
 
 convAppR l (a :<-> b) = (l :% a) :<-> (l :% b)
+
+convLambda (a :<-> b) = Lambda a :<-> Lambda b
