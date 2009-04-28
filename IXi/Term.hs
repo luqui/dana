@@ -102,7 +102,7 @@ convBeta _ = Nothing
 
 convEta term = term :<-> Lambda (quote 0 term :% Var 0)
 
-convAppL (a :<-> b) r = (a :% r) :<-> (b :% r)
+convAppL r (a :<-> b) = (a :% r) :<-> (b :% r)
 
 convAppR l (a :<-> b) = (l :% a) :<-> (l :% b)
 

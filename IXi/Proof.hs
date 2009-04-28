@@ -42,6 +42,13 @@ conversion conv pf = Proof $ do
     assert (goal == convFrom conv) $ "Goal does not match source of conversion"
     subgoal [] (convTo conv) pf
 
+hypConversion :: (Eq n) => Int -> Conversion n -> Proof n -> Proof n
+hypConversion n conv pf = Proof $ do
+    hyps <- asks cxHyps
+    assert (n < length hyps) $ "Hypothesis index out of range"
+    assert (hyps !! n == convFrom conv)
+    local (\s -> s { cxHyps = take n hyps ++ [convTo conv] ++ drop (n+1) hyps }) (checkProof pf)
+
 subgoal :: [Term n] -> Term n -> Proof n -> ProofM n ()
 subgoal hyps goal = local (\s -> s { cxGoal = goal, cxHyps = hyps ++ cxHyps s }) . checkProof
 

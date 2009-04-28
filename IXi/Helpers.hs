@@ -11,7 +11,7 @@ betaNFsteps = execWriter . go
     where
     go (Lambda t) = Lambda <$> censor' convLambda (go t)
     go (t :% u) = do
-        t' <- censor' (`convAppL` u) (go t)
+        t' <- censor' (convAppL u) (go t)
         case t' of
             Lambda {} -> do
                 let conv = fromJust (convBeta (t' :% u))
@@ -29,12 +29,8 @@ etaNF :: (Eq n) => Term n -> Conversion n
 etaNF (Lambda (t :% Var 0)) | Just t' <- unfree 0 t = convSym (convEta t') `safeTrans` etaNF t'
 etaNF (Lambda t) = convLambda (etaNF t)
 etaNF (t :% u) = let conv = etaNF t in
-                 convAppL conv u `safeTrans` convAppR (convTo conv) (etaNF u)
+                 convAppL u conv `safeTrans` convAppR (convTo conv) (etaNF u)
 etaNF x = convId x
-
-infixr 5 >~>
-(>~>) :: (Eq n) => (Term n -> Conversion n) -> (Term n -> Conversion n) -> (Term n -> Conversion n)
-(f >~> g) t = let conv = f t in conv `safeTrans` g (convTo conv)
 
 safeTrans a b =
     case convTrans a b of
@@ -42,3 +38,27 @@ safeTrans a b =
         Nothing -> error $ "Failed to unify: " ++ showConv a ++ " and " ++ showConv b
 
 showConv c = showTerm (const "*") (convFrom c) ++ " <-> " ++ showTerm (const "*") (convTo c)
+
+
+
+type Strategy n = Term n -> Maybe (Conversion n)
+
+redAppL :: Strategy n -> Strategy n
+redAppL strat (a :% b) = convAppL b <$> strat a
+redAppL strat _ = Nothing
+
+redAppR :: Strategy n -> Strategy n
+redAppR strat (a :% b) = convAppR a <$> strat b
+redAppR strat _ = Nothing
+
+redLambda :: Strategy n -> Strategy n
+redLambda strat (Lambda t) = convLambda <$> strat t
+redLambda strat _ = Nothing
+
+
+infixl 5 >~>
+(>~>) :: (Eq n) => Strategy n -> Strategy n -> Strategy n
+(s >~> s') t = do
+    conv <- s t
+    conv' <- s' (convTo conv)
+    return $ conv `safeTrans` conv'
