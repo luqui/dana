@@ -1,4 +1,11 @@
-module IXi.Proof where
+module IXi.Proof 
+    ( Proof
+    , hypothesis, conversion
+    , implRule, xiRule, hxiRule, hhRule
+    , theorem
+    , Theorem, prove
+    )
+where
 
 import IXi.Term
 import Control.Monad.Reader
@@ -75,6 +82,11 @@ hhRule = Proof $ do
     case goal of
         H :% (H :% a) -> return ()
         _ -> fail "Goal is not in the form H (H x)"
+
+theorem :: (Eq n) => Theorem -> Proof n
+theorem (Theorem t) = Proof $ do
+    goal <- asks cxGoal
+    assert (goal == t) "Goal does not match theorem"
 
 newtype Theorem = Theorem (forall n. Term n)
 
