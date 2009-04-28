@@ -1,5 +1,6 @@
 module IXi.Term 
     ( Term(..)
+    , showTerm
     , quote, subst, substNamed
     , unfree, free, freeNames
     , Conversion, convFrom, convTo
@@ -20,6 +21,19 @@ data Term name
     | NameVar name
     | Xi | H
     deriving (Eq,Ord)
+
+showTerm :: (name -> String) -> Term name -> String
+showTerm namefunc = go False False
+    where
+    go ap lp (Lambda t) = parens lp $ "\\. " ++ go False False t
+    go ap lp (t :% u) = parens ap $ showTerm False True t ++ " " ++ showTerm True True u
+    go ap lp (Var z) = show z
+    go ap lp (NameVar n) = namefunc n
+    go ap lp Xi = "Xi"
+    go ap lp H = "H"
+
+    parens True = \x. "(" ++ x ++ ")"
+    parens False = id
 
 
 quote :: Int -> Term n -> Term n
