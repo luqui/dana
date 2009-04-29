@@ -41,7 +41,7 @@ conversion conv pf = Proof $ do
     goal <- asks cxGoal
     case convert conv goal of
         Just goal' -> subgoal [] goal' pf
-        Nothing -> fail "Conversion failed"
+        Nothing -> fail $ "Conversion failed on goal " ++ showTerm (const "*") goal
 
 hypConversion :: Int -> Conversion n -> Proof n -> Proof n
 hypConversion n conv pf = Proof $ do
@@ -49,7 +49,7 @@ hypConversion n conv pf = Proof $ do
     assert (n < length hyps) $ "Hypothesis index out of range"
     case convert conv (hyps !! n) of
         Just hyp' -> local (\s -> s { cxHyps = take n hyps ++ [hyp'] ++ drop (n+1) hyps }) (checkProof pf)
-        Nothing -> fail "Conversion failed"
+        Nothing -> fail $ "Conversion failed on hypothesis " ++ showTerm (const "*") (hyps !! n)
 
 subgoal :: [Term n] -> Term n -> Proof n -> ProofM n ()
 subgoal hyps goal = local (\s -> s { cxGoal = goal, cxHyps = hyps ++ cxHyps s }) . checkProof
