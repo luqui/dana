@@ -134,12 +134,12 @@ convExpandId = Conversion $ \t -> Just (Lambda (Var 0) :% t)
 -- X -> (\x. X) Y
 convExpandConst y = Conversion $ \t -> Just (Lambda (quote 0 t) :% y)
 
--- (\x. A) Z ((\x. B) Z) -> (\x. A x (B x)) Z
+-- (\x. A) Z ((\x. B) Z) -> (\x. A B) Z
 convExpandProj :: Eq n => Conversion n
 convExpandProj = Conversion $ \t -> 
     case t of
         Lambda a :% z :% (Lambda b :% z') | z == z' -> 
-            Just (Lambda (a :% Var 0 :% (b :% Var 0)) :% z)
+            Just (Lambda (a :% b) :% z)
         _ -> Nothing
 
 -- (\x. A) C B -> (\x. A B) C
