@@ -95,7 +95,9 @@ hhRule = Proof $ do
 theorem :: (Eq n) => Theorem -> Proof n
 theorem (Theorem t) = Proof $ do
     goal <- asks cxGoal
-    assert (goal == t) "Goal does not match theorem"
+    assert (goal == t) $ "Goal does not match theorem: "
+                      ++ "\nGoal:    " ++ showTerm (const "*") goal
+                      ++ "\nTheorem: " ++ showTerm (const "*") t
 
 newtype Theorem = Theorem (forall n. Term n)
 

@@ -133,7 +133,7 @@ convBetaReduce = Conversion $ \t ->
 -- X -> (\x. x) X
 convExpandId = Conversion $ \t -> Just (Lambda (Var 0) :% t)
 -- X -> (\x. X) Y
-convExpandConst y = Conversion $ \t -> Just (Lambda (quote 0 y) :% t)
+convExpandConst y = Conversion $ \t -> Just (Lambda (quote 0 t) :% y)
 
 -- (\x. A) Z ((\x. B) Z) -> (\x. A x (B x)) Z
 convExpandProj :: Eq n => Conversion n
@@ -160,6 +160,7 @@ convExpandLambda = Conversion $ \t ->
     case t of
         Lambda (Lambda a :% c) | Just c' <- unfree 0 c -> 
             Just (Lambda (Lambda (subst 0 (Var 1) a)) :% c')
+        _ -> Nothing
 
 -- dependent conversion
 convDep :: (Term n -> Maybe (Conversion n)) -> Conversion n

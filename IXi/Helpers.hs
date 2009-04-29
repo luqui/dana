@@ -45,6 +45,11 @@ convEquiv t t' =
     in 
         if nf1 == nf2 then Just (conv1 `mappend` conv2) else Nothing
 
+-- X -> (\x. x) X -> (\y. (\x. x) X) Y -> (\x. \y. x) X Y
+convExpandK y = mconcat [
+    convExpandId,
+    convExpandConst y,
+    convInAppL convExpandLambda ]
 
 rebrand :: Term a -> Maybe (Term b)
 rebrand (Lambda t) = Lambda <$> rebrand t

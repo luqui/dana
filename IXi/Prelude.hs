@@ -2,6 +2,7 @@ module IXi.Prelude where
 
 import IXi.Term
 import IXi.Proof
+import IXi.Helpers
 import Data.Monoid (Monoid(..))
 
 -- Naming conventions:
@@ -95,3 +96,19 @@ Right prop_LL = prove (_L :% _L) $
 --     |- True              -- prop_True
 --    |- ΞU(\y. H(Ay))
 --     |- (\x. ΞU(\y. H(xy))) A  =  LA   -- pfLA
+prove_HAx_from_LA pfLA = 
+    conversion conv1 $
+        implRule _U (conversion convert_redK (theorem prop_True))
+                    (conversion conv2 pfLA)
+
+    where
+    Just conv1 = convEquiv (H :% (n "A" :% n "x"))
+                           (Lambda (H :% (n "A" :% Var 0)) :% n "x")
+    Just conv2 = convEquiv (Xi :% n "U" :% Lambda (H :% (n "A" :% Var 0)))
+                           (Lambda (Xi :% n "U" :% Lambda (H :% (Var 1 :% Var 0))) :% n "A")
+    n = NameVar
+
+-- |- ΞAB
+--  |- H(Ax)     -- prove_HAx_from_LA pfLA
+--  Ax |- Bx     -- pfB x
+prove_Xi_with_L pfLA pfB = xiRule (\_ -> prove_HAx_from_LA pfLA) pfB
