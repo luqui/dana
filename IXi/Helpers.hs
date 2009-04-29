@@ -1,37 +1,55 @@
 module IXi.Helpers where
 
 import IXi.Term
-import Data.Monoid (Monoid(..))
+import Control.Monad.Writer
+import Control.Applicative
 
--- X
--- -> (\x. \y. x) X Y
--- -> (\y. X) Y
-convExpandConst y = mconcat [
-    convExpandK y,
-    convInAppL convBetaReduce ]
+convNF :: (Eq n) => Term n -> (Term n, Conversion n')
+convNF = runWriter . go
+    where
+    go (Lambda t) = Lambda <$> censor convInLambda (go t)
+    go (t :% u) = do
+        t' <- censor convInAppL (go t)
+        case t' of
+            Lambda body -> tell convBetaReduce >> go (subst 0 u body)
+            _ -> (t :%) <$> censor convInAppR (go u)
+    go x = return x
 
--- X (Y Z) 
--- -> (\x. X) Z (Y Z) 
--- -> (\z. (\x. X) z (Y z)) Z 
--- -> (\z. X (Y z)) Z
-convExpandB :: (Eq n) => Conversion n
-convExpandB = convDep $ \t ->
-    case t of
-        x :% (y :% z) -> Just $ mconcat [
-            (convInAppL . convExpandConst) z,
-            convExpandS,
-            (convInAppL . convInLambda . convInAppL) convBetaReduce ]
-        _ -> Nothing
+convInverseNF :: (Eq n, Eq n') => Term n -> (Term n, Conversion n')
+convInverseNF = second getDual . runWriter . go
+    where
+    go (Lambda t) = Lambda <$> censor (inDual convInLambda) (go t)
+    go (t :% u) = do
+        t' <- censor (inDual convInAppL) (go t)
+        case t' of
+            Lambda (Var 0) -> tell (Dual convExpandId) >> go u
+            Lambda t | Just t' <- unfree 0 t 
+                     , Just t'' <- rebrand t'   -- << name-dependency here
+                -> tell (Dual (convExpandConst t'')) >> go t'
+            Lambda (a :% b)
+                | Just a' <- unfree 0 a -> tell (Dual convExpandRight) >> go (a' :% (Lambda b :% u))
+                | Just b' <- unfree 0 b -> tell (Dual convExpandLeft)  >> go ((Lambda a :% u) :% b')
+                | otherwise -> tell (Dual convExpandProj) >> go ((Lambda a :% u) :% (Lambda b :% u))
+            Lambda (Lambda a) -> tell (Dual convExpandLambda) >> go (Lambda (Lambda (subst 0 (Var 1) a) :% u))
+            Lambda _ -> error $ "Normal form not invertible in a name-independent way: " ++ showTerm (const "*") t'
+            _ -> (t' :%) <$> censor (inDual convInAppR) (go u)
+    go x = return x
+    
+    inDual f (Dual x) = Dual (f x)
+    second f (a,b) = (a, f b)
 
--- X Z Y
--- -> X Z ((\x. Y) Z)
--- -> (\z. X z ((\x. Y) z)) Z
--- -> (\z. X z (Y z)) Z
-convExpandC :: (Eq n) => Conversion n
-convExpandC = convDep $ \t ->
-    case t of
-        x :% z :% y -> Just $ mconcat [
-            (convInAppR . convExpandConst) z,
-            convExpandS,
-            (convInAppL . convInLambda . convInAppR) convBetaReduce ]
-        _ -> Nothing
+convEquiv :: (Eq n, Eq n') => Term n -> Term n -> Maybe (Conversion n')
+convEquiv t t' = 
+    let (nf1, conv1) = convNF t
+        (nf2, conv2) = convInverseNF t'
+    in 
+        if nf1 == nf2 then Just (conv1 `mappend` conv2) else Nothing
+
+
+rebrand :: Term a -> Maybe (Term b)
+rebrand (Lambda t) = Lambda <$> rebrand t
+rebrand (t :% u) = liftA2 (:%) (rebrand t) (rebrand u)
+rebrand (Var n) = Just (Var n)
+rebrand (NameVar n) = Nothing
+rebrand Xi = Just Xi
+rebrand H = Just H

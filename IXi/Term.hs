@@ -9,7 +9,10 @@ module IXi.Term
     , convInLambda, convInAppL, convInAppR
     , convEtaContract, convEtaExpand
     , convBetaReduce
-    , convExpandI, convExpandK, convExpandS
+
+    , convExpandId, convExpandConst
+    , convExpandProj, convExpandLeft, convExpandRight
+    , convExpandLambda
     , convDep
     )
 where
@@ -127,15 +130,38 @@ convBetaReduce = Conversion $ \t ->
         Lambda a :% b -> Just (subst 0 b a)
         _ -> Nothing
 
-convExpandI = Conversion $ \t -> Just (Lambda (Var 0) :% t)
-convExpandK y = Conversion $ \t -> Just (Lambda (Lambda (Var 1)) :% t :% y)
+-- X -> (\x. x) X
+convExpandId = Conversion $ \t -> Just (Lambda (Var 0) :% t)
+-- X -> (\x. X) Y
+convExpandConst y = Conversion $ \t -> Just (Lambda (quote 0 y) :% t)
 
-convExpandS :: (Eq n) => Conversion n
-convExpandS = Conversion $ \t ->
+-- (\x. A) Z ((\x. B) Z) -> (\x. A x (B x)) Z
+convExpandProj :: Eq n => Conversion n
+convExpandProj = Conversion $ \t -> 
     case t of
-        x :% z :% (y :% z') | z == z' -> Just (Lambda (quote 0 x :% Var 0 :% (quote 0 y :% Var 0)) :% z)
+        Lambda a :% z :% (Lambda b :% z') | z == z' -> 
+            Just (Lambda (a :% Var 0 :% (b :% Var 0)) :% z)
         _ -> Nothing
+
+-- (\x. A) C B -> (\x. A B) C
+convExpandLeft = Conversion $ \t ->
+    case t of
+        Lambda a :% c :% b -> Just (Lambda (a :% quote 0 b) :% c)
+        _ -> Nothing
+
+-- A ((\x. B) C) -> (\x. A B) C
+convExpandRight = Conversion $ \t ->
+    case t of
+        a :% (Lambda b :% c) -> Just (Lambda (quote 0 a :% b) :% c)
+        _ -> Nothing
+
+-- \y. (\x. A) C -> (\x. \y. A) C      (y not free in C)
+convExpandLambda = Conversion $ \t ->
+    case t of
+        Lambda (Lambda a :% c) | Just c' <- unfree 0 c -> 
+            Just (Lambda (Lambda (subst 0 (Var 1) a)) :% c')
 
 -- dependent conversion
 convDep :: (Term n -> Maybe (Conversion n)) -> Conversion n
 convDep f = Conversion $ \t -> (`convert` t) =<< f t
+
