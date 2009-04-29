@@ -107,7 +107,7 @@ instance Show Theorem where
 thmStatement :: Theorem -> Term n
 thmStatement (Theorem t) = t
 
-prove :: (forall n. Term n) -> (forall n. Eq n => Proof n) -> Either String Theorem
+prove :: (forall n. Term n) -> (forall n. Ord n => Proof n) -> Either String Theorem
 prove term pf = right (const (Theorem term)) 
               . (`runReader` Context term [])
               . (`evalStateT` [0..])
