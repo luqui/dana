@@ -13,7 +13,6 @@ module IXi.Term
     , convExpandId, convExpandConst
     , convExpandProj, convExpandLeft, convExpandRight
     , convExpandLambda
-    , convDep
     )
 where
 
@@ -161,8 +160,3 @@ convExpandLambda = Conversion $ \t ->
         Lambda (Lambda a :% c) | Just c' <- unfree 0 c -> 
             Just (Lambda (Lambda (subst 0 (Var 1) a)) :% c')
         _ -> Nothing
-
--- dependent conversion
-convDep :: (Term n -> Maybe (Conversion n)) -> Conversion n
-convDep f = Conversion $ \t -> (`convert` t) =<< f t
-

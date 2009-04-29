@@ -22,7 +22,7 @@ convert_expK = convExpandK
 _I = Lambda (Var 0)
 
 -- Material implication.
-a --> b = Xi :% (_K :% a) :% (_K :% b)
+a ==> b = Xi :% (_K :% a) :% (_K :% b)
 
 prove_impl_abs :: Proof n -> Proof n -> Proof n
 -- |- Ξ(KA)(KB)
@@ -112,3 +112,25 @@ prove_HAx_from_LA pfLA =
 --  |- H(Ax)     -- prove_HAx_from_LA pfLA
 --  Ax |- Bx     -- pfB x
 prove_Xi_with_L pfLA pfB = xiRule (\_ -> prove_HAx_from_LA pfLA) pfB
+
+
+-- Function type  (A -> B = \f. ΞA(\x. B (f x)))
+_F = Lambda (Lambda (Lambda (Xi :% Var 0 :% Lambda (Var 2 :% (Var 1 :% Var 0)))))
+
+-- |- ΞL(\A. ΞL(\B. L(FAB)))
+--  |- LL             -- prop_LL
+--  LA |- ΞL(\B. L(FAB))
+--   LA |- LL         -- prop_LL
+--   LA, LB |- L(FAB)      =  L((\A. \B. \f. ΞA(\x. B (f x))) A B)
+--    LA, LB |- L((\B. \f. ΞA(\x. B (f x))) B)
+--     LA, LB |- L(\f. ΞA(\x. B (f x)))  = (\z. ΞU(\x. H(zx))) (\f. ΞA(\x. B (f x)))
+--      LA, LB |- ΞU(\x. H((\f. ΞA(\y. B (f y)))x))
+--       LA, LB |- ΞU(\x. H(ΞA(\y. B (x y))))
+--        LA, LB |- H(Uz)
+--         LA, LB |- H True   -- prop_True
+--        LA, LB, Uz |- (\x. H(ΞA(\y. B (x y)))) z
+--         LA, LB, Uz |- H(ΞA(\y. B (z y)))
+--          LA, LB, Uz |- LA
+--          LA, LB, Uz, Ay |- H((\y. B (z y)) y)
+--           LA, LB, Uz, Ay |- H (B (z y))
+--            LA, LB, Uz, Ay |- LB

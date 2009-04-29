@@ -51,6 +51,7 @@ convExpandK y = mconcat [
     convExpandConst y,
     convInAppL convExpandLambda ]
 
+
 rebrand :: Term a -> Maybe (Term b)
 rebrand (Lambda t) = Lambda <$> rebrand t
 rebrand (t :% u) = liftA2 (:%) (rebrand t) (rebrand u)
@@ -58,3 +59,4 @@ rebrand (Var n) = Just (Var n)
 rebrand (NameVar n) = Nothing
 rebrand Xi = Just Xi
 rebrand H = Just H
+
