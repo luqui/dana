@@ -18,25 +18,27 @@ convNF = runWriter . go
 convInverseNF :: (Eq n, Eq n') => Term n -> (Term n, Conversion n')
 convInverseNF = second getDual . runWriter . go
     where
-    go (Lambda t) = Lambda <$> censor (inDual convInLambda) (go t)
+    go (Lambda t) = Lambda <$> censor' convInLambda (go t)
     go (t :% u) = do
-        t' <- censor (inDual convInAppL) (go t)
+        t' <- censor' convInAppL (go t)
         case t' of
-            Lambda (Var 0) -> tell (Dual convExpandId) >> go u
+            Lambda (Var 0) -> tell' convExpandId >> go u
             Lambda t | Just t' <- unfree 0 t 
                      , Just t'' <- rebrand t'   -- << name-dependency here
-                -> tell (Dual (convExpandConst t'')) >> go t'
+                -> tell' (convExpandConst t'') >> go t'
             Lambda (a :% b)
-                | Just a' <- unfree 0 a -> tell (Dual convExpandRight) >> go (a' :% (Lambda b :% u))
-                | Just b' <- unfree 0 b -> tell (Dual convExpandLeft)  >> go ((Lambda a :% u) :% b')
-                | otherwise -> tell (Dual convExpandProj) >> go ((Lambda a :% u) :% (Lambda b :% u))
-            Lambda (Lambda a) -> tell (Dual convExpandLambda) >> go (Lambda (Lambda (subst 0 (Var 1) a) :% u))
+                | Just a' <- unfree 0 a -> tell' convExpandRight >> go (a' :% (Lambda b :% u))
+                | Just b' <- unfree 0 b -> tell' convExpandLeft  >> go ((Lambda a :% u) :% b')
+                | otherwise -> tell' convExpandProj >> go ((Lambda a :% u) :% (Lambda b :% u))
+            Lambda (Lambda a) -> tell' convExpandLambda >> go (Lambda (Lambda (subst 0 (Var 1) a) :% u))
             Lambda _ -> error $ "Normal form not invertible in a name-independent way: " ++ showTerm (const "*") t'
-            _ -> (t' :%) <$> censor (inDual convInAppR) (go u)
+            _ -> (t' :%) <$> censor' convInAppR (go u)
     go x = return x
     
     inDual f (Dual x) = Dual (f x)
     second f (a,b) = (a, f b)
+    tell' = tell . Dual
+    censor' = censor . inDual
 
 convEquiv :: (Eq n, Eq n') => Term n -> Term n -> Maybe (Conversion n')
 convEquiv t t' = 
