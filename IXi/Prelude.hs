@@ -88,3 +88,10 @@ Right prop_LL = prove (_L :% _L) $
                (\_ -> conversion (convBetaReduce `mappend` convInAppR convBetaReduce) $
                     hxiRule (\_ -> conversion (convInAppR convert_redK) (theorem prop_HTrue))
                             (\_ -> conversion (convInAppR convBetaReduce) hhRule))
+
+--  |- H(Ax)
+--   |- (\y. H(Ay))x
+--    |- Ux
+--     |- True              -- prop_True
+--    |- ΞU(\y. H(Ay))
+--     |- (\x. ΞU(\y. H(xy))) A  =  LA   -- pfLA

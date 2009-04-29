@@ -10,6 +10,7 @@ module IXi.Term
     , convEtaContract, convEtaExpand
     , convBetaReduce
     , convExpandI, convExpandK, convExpandS
+    , convDep
     )
 where
 
@@ -134,3 +135,7 @@ convExpandS = Conversion $ \t ->
     case t of
         x :% z :% (y :% z') | z == z' -> Just (Lambda (quote 0 x :% Var 0 :% (quote 0 y :% Var 0)) :% z)
         _ -> Nothing
+
+-- dependent conversion
+convDep :: (Term n -> Maybe (Conversion n)) -> Conversion n
+convDep f = Conversion $ \t -> (`convert` t) =<< f t
