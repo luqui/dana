@@ -1,8 +1,9 @@
 module IXi.Helpers where
 
 import IXi.Term
-import Control.Monad.Writer
+import Control.Monad.Trans.Writer
 import Control.Applicative
+import Data.Monoid
 import Data.Maybe (fromJust)
 
 convNF :: Term -> (Term, Conversion)

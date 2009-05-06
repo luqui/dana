@@ -8,17 +8,24 @@ module IXi.Proof
 where
 
 import IXi.Term
-import Control.Monad.Reader
-import Control.Monad.State
-import Control.Monad.Error
+import Control.Monad.Trans
+import qualified Control.Monad.Trans.Reader as Reader
+import qualified Control.Monad.Trans.State as State
+import qualified Control.Monad.Trans.Error as Error
 
 data Context
     = Context { cxGoal :: Term
               , cxHyps :: [Term]
               }
 
-type ProofM = ErrorT String (StateT [Name] (Reader Context))
+type ProofM = Reader.ReaderT Context (Error.ErrorT String (State.State [Name]))
 newtype Proof = Proof { checkProof :: ProofM () }
+
+gets = lift . lift . State.gets
+modify = lift . lift . State.modify
+asks = Reader.asks
+ask = Reader.ask
+local = Reader.local
 
 assert :: Bool -> String -> ProofM ()
 assert True err = return ()
@@ -109,9 +116,9 @@ thmStatement (Theorem t) = t
 
 prove :: Term -> Proof -> Either String Theorem
 prove term pf = right (const (Theorem term)) 
-              . (`runReader` Context term [])
-              . (`evalStateT` [safeName term..])
-              . runErrorT
+              . (`State.evalState` [safeName term..])
+              . Error.runErrorT
+              . (`Reader.runReaderT` Context term [])
               . checkProof $ pf
 
 right :: (b -> c) -> Either a b -> Either a c
