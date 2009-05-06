@@ -24,7 +24,6 @@ _I = Lambda (Var 0)
 -- Material implication.
 a ==> b = Xi :% (_K :% a) :% (_K :% b)
 
-prove_impl_abs :: Proof n -> Proof n -> Proof n
 -- |- Ξ(KA)(KB)
 --  |- H(KAx)
 --   |- HA    -- pfH
@@ -102,11 +101,11 @@ prove_HAx_from_LA pfLA =
                     (conversion conv2 pfLA)
 
     where
-    Just conv1 = convEquiv (H :% (n "A" :% n "x"))
-                           (Lambda (H :% (n "A" :% Var 0)) :% n "x")
-    Just conv2 = convEquiv (Xi :% n "U" :% Lambda (H :% (n "A" :% Var 0)))
-                           (Lambda (Xi :% n "U" :% Lambda (H :% (Var 1 :% Var 0))) :% n "A")
-    n = NameVar
+    Just conv1 = convEquiv (H :% (nA :% nx))
+                           (Lambda (H :% (nA :% Var 0)) :% nx)
+    Just conv2 = convEquiv (Xi :% nU :% Lambda (H :% (nA :% Var 0)))
+                           (Lambda (Xi :% nU :% Lambda (H :% (Var 1 :% Var 0))) :% nA)
+    [nA,nx,nU] = map (NameVar . toEnum) [0,1,2]
 
 -- |- ΞAB
 --  |- H(Ax)     -- prove_HAx_from_LA pfLA

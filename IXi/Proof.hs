@@ -12,49 +12,49 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Error
 
-data Context n
-    = Context { cxGoal :: Term n
-              , cxHyps :: [Term n]
+data Context
+    = Context { cxGoal :: Term
+              , cxHyps :: [Term]
               }
 
-type ProofM n = ErrorT String (StateT [n] (Reader (Context n)))
-newtype Proof n = Proof { checkProof :: ProofM n () }
+type ProofM = ErrorT String (StateT [Name] (Reader Context))
+newtype Proof = Proof { checkProof :: ProofM () }
 
-assert :: Bool -> String -> ProofM n ()
+assert :: Bool -> String -> ProofM ()
 assert True err = return ()
 assert False err = fail err
 
-allocate :: ProofM n n
+allocate :: ProofM Name
 allocate = do
     x <- gets head
     modify tail
     return x
 
-hypothesis :: (Eq n) => Int -> Proof n
+hypothesis :: Int -> Proof
 hypothesis n = Proof $ do
     Context goal hyp <- ask
     assert (n < length hyp) "Hypothesis index out of range"
     assert (hyp !! n == goal) "Hypothesis does not match goal"
 
-conversion :: Conversion n -> Proof n -> Proof n
+conversion :: Conversion -> Proof -> Proof
 conversion conv pf = Proof $ do
     goal <- asks cxGoal
     case convert conv goal of
         Just goal' -> subgoal [] goal' pf
-        Nothing -> fail $ "Conversion failed on goal " ++ showTerm (const "*") goal
+        Nothing -> fail $ "Conversion failed on goal " ++ showTerm goal
 
-hypConversion :: Int -> Conversion n -> Proof n -> Proof n
+hypConversion :: Int -> Conversion -> Proof -> Proof
 hypConversion n conv pf = Proof $ do
     hyps <- asks cxHyps
     assert (n < length hyps) $ "Hypothesis index out of range"
     case convert conv (hyps !! n) of
         Just hyp' -> local (\s -> s { cxHyps = take n hyps ++ [hyp'] ++ drop (n+1) hyps }) (checkProof pf)
-        Nothing -> fail $ "Conversion failed on hypothesis " ++ showTerm (const "*") (hyps !! n)
+        Nothing -> fail $ "Conversion failed on hypothesis " ++ showTerm (hyps !! n)
 
-subgoal :: [Term n] -> Term n -> Proof n -> ProofM n ()
+subgoal :: [Term] -> Term -> Proof -> ProofM ()
 subgoal hyps goal = local (\s -> s { cxGoal = goal, cxHyps = hyps ++ cxHyps s }) . checkProof
 
-implRule :: Term n -> Proof n -> Proof n -> Proof n
+implRule :: Term -> Proof -> Proof -> Proof
 implRule p pfPx pfXpq = Proof $ do
     goal <- asks cxGoal
     case goal of
@@ -63,7 +63,7 @@ implRule p pfPx pfXpq = Proof $ do
             subgoal [] (Xi :% p :% q) pfXpq
         _ -> fail "Goal is not in the form a b"
 
-xiRule :: (n -> Proof n) -> (n -> Proof n) -> Proof n
+xiRule :: (Name -> Proof) -> (Name -> Proof) -> Proof
 xiRule hproof xiproof = Proof $ do
     goal <- asks cxGoal
     case goal of
@@ -74,7 +74,7 @@ xiRule hproof xiproof = Proof $ do
             subgoal [a :% nv] (b :% nv) (xiproof name)
         _ -> fail "Goal is not in the form Xi a b"
 
-hxiRule :: (n -> Proof n) -> (n -> Proof n) -> Proof n
+hxiRule :: (Name -> Proof) -> (Name -> Proof) -> Proof
 hxiRule hproof hxiproof = Proof $ do
     goal <- asks cxGoal
     case goal of
@@ -85,32 +85,32 @@ hxiRule hproof hxiproof = Proof $ do
             subgoal [a :% nv] (H :% (b :% nv)) (hxiproof name)
         _ -> fail "Goal is not in the form H (Xi a b)"
 
-hhRule :: Proof n
+hhRule :: Proof
 hhRule = Proof $ do
     goal <- asks cxGoal
     case goal of
         H :% (H :% a) -> return ()
         _ -> fail "Goal is not in the form H (H x)"
 
-theorem :: (Eq n) => Theorem -> Proof n
+theorem :: Theorem -> Proof
 theorem (Theorem t) = Proof $ do
     goal <- asks cxGoal
     assert (goal == t) $ "Goal does not match theorem: "
-                      ++ "\nGoal:    " ++ showTerm (const "*") goal
-                      ++ "\nTheorem: " ++ showTerm (const "*") t
+                      ++ "\nGoal:    " ++ showTerm goal
+                      ++ "\nTheorem: " ++ showTerm t
 
-newtype Theorem = Theorem (forall n. Term n)
+newtype Theorem = Theorem Term
 
 instance Show Theorem where
-    show (Theorem t) = "|- " ++ show (t :: Term ())
+    show (Theorem t) = "|- " ++ show t
 
-thmStatement :: Theorem -> Term n
+thmStatement :: Theorem -> Term
 thmStatement (Theorem t) = t
 
-prove :: (forall n. Term n) -> (forall n. Ord n => Proof n) -> Either String Theorem
+prove :: Term -> Proof -> Either String Theorem
 prove term pf = right (const (Theorem term)) 
               . (`runReader` Context term [])
-              . (`evalStateT` [0..])
+              . (`evalStateT` [safeName term..])
               . runErrorT
               . checkProof $ pf
 

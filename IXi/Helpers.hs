@@ -3,8 +3,9 @@ module IXi.Helpers where
 import IXi.Term
 import Control.Monad.Writer
 import Control.Applicative
+import Data.Maybe (fromJust)
 
-convNF :: (Eq n) => Term n -> (Term n, Conversion n')
+convNF :: Term -> (Term, Conversion)
 convNF = runWriter . go
     where
     go (Lambda t) = Lambda <$> censor convInLambda (go t)
@@ -15,7 +16,7 @@ convNF = runWriter . go
             _ -> (t :%) <$> censor convInAppR (go u)
     go x = return x
 
-convInverseNF :: (Eq n, Eq n') => Term n -> (Term n, Conversion n')
+convInverseNF :: Term -> (Term, Conversion)
 convInverseNF = second getDual . runWriter . go
     where
     go (Lambda t) = Lambda <$> censor' convInLambda (go t)
@@ -23,15 +24,13 @@ convInverseNF = second getDual . runWriter . go
         t' <- censor' convInAppL (go t)
         case t' of
             Lambda (Var 0) -> tell' convExpandId >> go u
-            Lambda t | Just t' <- unfree 0 t 
-                     , Just t'' <- rebrand t'   -- << name-dependency here
-                -> tell' (convExpandConst t'') >> go t'
+            Lambda t | not (free 0 t)
+                -> tell' (convExpandConst (decr t)) >> go (decr t)
             Lambda (a :% b)
-                | Just a' <- unfree 0 a -> tell' convExpandRight >> go (a' :% (Lambda b :% u))
-                | Just b' <- unfree 0 b -> tell' convExpandLeft  >> go ((Lambda a :% u) :% b')
+                | not (free 0 a) -> tell' convExpandRight >> go (decr a :% (Lambda b :% u))
+                | not (free 0 b) -> tell' convExpandLeft  >> go ((Lambda a :% u) :% decr b)
                 | otherwise -> tell' convExpandProj >> go ((Lambda a :% u) :% (Lambda b :% u))
             Lambda (Lambda a) -> tell' convExpandLambda >> go (Lambda (Lambda (subst 0 (Var 1) a) :% u))
-            Lambda _ -> error $ "Normal form not invertible in a name-independent way: " ++ showTerm (const "*") t'
             _ -> (t' :%) <$> censor' convInAppR (go u)
     go x = return x
     
@@ -39,8 +38,9 @@ convInverseNF = second getDual . runWriter . go
     second f (a,b) = (a, f b)
     tell' = tell . Dual
     censor' = censor . inDual
+    decr = fromJust . unfree 0
 
-convEquiv :: (Eq n, Eq n') => Term n -> Term n -> Maybe (Conversion n')
+convEquiv :: Term -> Term -> Maybe Conversion
 convEquiv t t' = 
     let (nf1, conv1) = convNF t
         (nf2, conv2) = convInverseNF t'
@@ -52,13 +52,3 @@ convExpandK y = mconcat [
     convExpandId,
     convExpandConst y,
     convInAppL convExpandLambda ]
-
-
-rebrand :: Term a -> Maybe (Term b)
-rebrand (Lambda t) = Lambda <$> rebrand t
-rebrand (t :% u) = liftA2 (:%) (rebrand t) (rebrand u)
-rebrand (Var n) = Just (Var n)
-rebrand (NameVar n) = Nothing
-rebrand Xi = Just Xi
-rebrand H = Just H
-
