@@ -1,0 +1,13 @@
+Name: ixi
+Description: A proof checker for the IΞ calculus.
+Version: 0.1
+Stability: experimental
+Synopsis: A proof checker for the IΞ calculus.
+License: BSD3
+Category: Compilers/Interpreters, Dependent Types, Theorem Provers
+Author: Luke Palmer
+Homepage: http://github.com/luqui/dana
+Maintainer: lrpalmer@gmail.com
+Build-Type: Simple
+Build-Depends: base, transformers, containers
+Exposed-Modules: IXi.Term, IXi.Proof, IXi.Helpers, IXi.Prelude
