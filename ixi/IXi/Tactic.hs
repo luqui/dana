@@ -1,5 +1,8 @@
 module IXi.Tactic
     ( Tactic, runTactic
+
+    , withGoal
+    , withHypStatement
     
     , hypothesis
     , conversion
@@ -52,8 +55,8 @@ runTactic (Tactic tac) goal = runTacF tac seq
     where
     seq = Sequent { seqNumHyps = 0, seqHyps = [], seqGoal = goal }
 
-withGoal :: (Term -> TacF f a) -> TacF f a
-withGoal f = withSequent (f . seqGoal)
+withGoalF :: (Term -> TacF f a) -> TacF f a
+withGoalF f = withSequent (f . seqGoal)
 
 withHyp :: Term -> (Hypothesis -> TacF f a) -> TacF f a
 withHyp hypterm f = TacF $ \seq -> 
@@ -67,6 +70,14 @@ subgoal goal' tac = TacF (\seq -> runTacF tac (seq { seqGoal = goal' }))
 withSequent :: (Sequent -> TacF f a) -> TacF f a
 withSequent f = TacF $ \seq -> runTacF (f seq) seq
 
+
+withGoal :: (Term -> Tactic f) -> Tactic f
+withGoal f = Tactic . withGoalF $ getTacF . f
+
+withHypStatement :: Hypothesis -> (Term -> Tactic f) -> Tactic f
+withHypStatement hyp f = Tactic . withSequent $ \seq -> getTacF (f (hypToTerm seq hyp))
+
+
 hypothesis :: (Alternative f) => Hypothesis -> Tactic f
 hypothesis hyp = Tactic . withSequent $ \seq -> 
     if hypToTerm seq hyp == seqGoal seq
@@ -74,7 +85,7 @@ hypothesis hyp = Tactic . withSequent $ \seq ->
         else empty
 
 conversion :: (Alternative f) => Conversion -> Tactic f -> Tactic f
-conversion conv (Tactic rest) = Tactic . withGoal $ \goal ->
+conversion conv (Tactic rest) = Tactic . withGoalF $ \goal ->
     case convert conv goal of
         Just goal' -> subgoal goal' rest
         Nothing -> empty
@@ -92,7 +103,7 @@ hypConversion hyp conv (Tactic rest) = Tactic . withSequent $ \seq ->
     replace _ _ [] = error "Invalid replacement"
 
 implRule :: (Alternative f) => Term -> Tactic f -> Tactic f -> Tactic f
-implRule p (Tactic pfPx) (Tactic pfXpq) = Tactic . withGoal $ \goal ->
+implRule p (Tactic pfPx) (Tactic pfXpq) = Tactic . withGoalF $ \goal ->
     case goal of
         q :% x -> P.implRule p <$> subgoal (p :% x) pfPx
                                <*> subgoal (Xi :% p :% q) pfXpq
@@ -117,13 +128,13 @@ hxiRule n (Tactic hproof) hxiproof = Tactic . withSequent $ \seq ->
         _ -> empty
 
 hhRule :: (Alternative f) => Tactic f
-hhRule = Tactic . withGoal $ \goal ->
+hhRule = Tactic . withGoalF $ \goal ->
     case goal of
         H :% (H :% x) -> pure P.hhRule
         _ -> empty
 
 theorem :: (Alternative f) => P.Theorem -> Tactic f
-theorem thm = Tactic . withGoal $ \goal ->
+theorem thm = Tactic . withGoalF $ \goal ->
     if goal == P.thmStatement thm
         then pure (P.theorem thm)
         else empty
