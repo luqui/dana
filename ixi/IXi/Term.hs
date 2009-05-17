@@ -1,6 +1,6 @@
 module IXi.Term 
     ( Term(..)
-    , showTerm
+    , showTermWith, showTerm
     , quote, subst, substNamed
     , unfree, free, freeNames, nameFree
 
@@ -36,18 +36,21 @@ data Term
 instance Show Term where
     show = showTerm
 
-showTerm :: Term -> String
-showTerm = go False False
+showTermWith :: (Name -> String) -> Term -> String
+showTermWith nameRender = go False False
     where
     go ap lp (Lambda t) = parens lp $ "\\. " ++ go False False t
     go ap lp (t :% u) = parens ap $ go False True t ++ " " ++ go True True u
     go ap lp (Var z) = show z
-    go ap lp (NameVar n) = show n
+    go ap lp (NameVar n) = nameRender n
     go ap lp Xi = "Xi"
     go ap lp H = "H"
 
     parens True = \x -> "(" ++ x ++ ")"
     parens False = id
+
+showTerm :: Term -> String
+showTerm = showTermWith show
 
 -- returns the least name such that it and all its successors
 -- are unused in the term

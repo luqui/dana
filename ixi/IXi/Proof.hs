@@ -43,6 +43,7 @@ instance Monoid Error where
 valid = Error Nothing
 invalid = Error . Just
 
+-- TODO idea:  Use Tactic Identity to check proofs.
 checkProof :: Proof -> Sequent -> Error
 checkProof (Hypothesis z) (hyps :|- goal)
     | 0 <= z && z < length hyps && hyps !! z == goal = valid
