@@ -10,4 +10,4 @@ Homepage: http://github.com/luqui/dana
 Maintainer: lrpalmer@gmail.com
 Build-Type: Simple
 Build-Depends: base, transformers, containers
-Exposed-Modules: IXi.Term, IXi.Proof, IXi.Helpers, IXi.Prelude, IXi.Conversion
+Exposed-Modules: IXi.Term, IXi.Proof, IXi.Helpers, IXi.Conversion

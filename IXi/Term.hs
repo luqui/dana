@@ -2,7 +2,7 @@ module IXi.Term
     ( Term(..)
     , showTerm
     , quote, subst, substNamed
-    , unfree, free, freeNames
+    , unfree, free, freeNames, nameFree
 
     , Name, safeName
     )
@@ -102,3 +102,6 @@ freeNames (Lambda t) = freeNames t
 freeNames (t :% u) = freeNames t `Set.union` freeNames u
 freeNames (NameVar n) = Set.singleton n
 freeNames _ = Set.empty
+
+nameFree :: Term -> Name -> Bool
+nameFree t n = n `Set.member` freeNames t

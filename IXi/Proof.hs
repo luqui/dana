@@ -9,119 +9,97 @@ where
 
 import IXi.Term
 import IXi.Conversion
-import Control.Monad.Trans
-import qualified Control.Monad.Trans.Reader as Reader
-import qualified Control.Monad.Trans.State as State
-import qualified Control.Monad.Trans.Error as Error
+import Data.Monoid
 
-data Context
-    = Context { cxGoal :: Term
-              , cxHyps :: [Term]
-              }
+data Proof
+    = Hypothesis Int
+    | Conversion Conversion Proof
+    | HypConversion Int Conversion Proof
+    | ImplRule Term Proof Proof
+    | XiRule Name Proof Proof
+    | HXiRule Name Proof Proof
+    | HHRule
+    | Theorem Theorem
 
-type ProofM = Reader.ReaderT Context (Error.ErrorT String (State.State [Name]))
-newtype Proof = Proof { checkProof :: ProofM () }
+hypothesis = Hypothesis
+conversion = Conversion
+hypConversion = HypConversion
+implRule = ImplRule
+xiRule = XiRule
+hxiRule = HXiRule
+hhRule = HHRule
+theorem = Theorem
 
-gets = lift . lift . State.gets
-modify = lift . lift . State.modify
-asks = Reader.asks
-ask = Reader.ask
-local = Reader.local
+infix 1 :|-
+data Sequent = [Term] :|- Term
 
-assert :: Bool -> String -> ProofM ()
-assert True err = return ()
-assert False err = fail err
+newtype Error = Error (Maybe String)
 
-allocate :: ProofM Name
-allocate = do
-    x <- gets head
-    modify tail
-    return x
+instance Monoid Error where
+    mempty = valid
+    mappend (Error Nothing) u = u
+    mappend (Error (Just e)) _ = Error (Just e)
 
-hypothesis :: Int -> Proof
-hypothesis n = Proof $ do
-    Context goal hyp <- ask
-    assert (n < length hyp) "Hypothesis index out of range"
-    assert (hyp !! n == goal) "Hypothesis does not match goal"
+valid = Error Nothing
+invalid = Error . Just
 
-conversion :: Conversion -> Proof -> Proof
-conversion conv pf = Proof $ do
-    goal <- asks cxGoal
-    case convert conv goal of
-        Just goal' -> subgoal [] goal' pf
-        Nothing -> fail $ "Conversion failed on goal " ++ showTerm goal
+checkProof :: Proof -> Sequent -> Error
+checkProof (Hypothesis z) (hyps :|- goal)
+    | 0 <= z && z < length hyps && hyps !! z == goal = valid
+    | otherwise = invalid "Hypothesis does not match goal"
 
-hypConversion :: Int -> Conversion -> Proof -> Proof
-hypConversion n conv pf = Proof $ do
-    hyps <- asks cxHyps
-    assert (n < length hyps) $ "Hypothesis index out of range"
-    case convert conv (hyps !! n) of
-        Just hyp' -> local (\s -> s { cxHyps = take n hyps ++ [hyp'] ++ drop (n+1) hyps }) (checkProof pf)
-        Nothing -> fail $ "Conversion failed on hypothesis " ++ showTerm (hyps !! n)
+checkProof (Conversion c p') (hyps :|- goal) = 
+    case convert c goal of
+        Nothing -> invalid "Goal conversion failed"
+        Just goal' -> checkProof p' (hyps :|- goal')
 
-subgoal :: [Term] -> Term -> Proof -> ProofM ()
-subgoal hyps goal = local (\s -> s { cxGoal = goal, cxHyps = hyps ++ cxHyps s }) . checkProof
+checkProof (HypConversion z c p') (hyps :|- goal)
+    | 0 <= z && z < length hyps =
+        case convert c (hyps !! z) of
+            Nothing -> invalid "Hypothesis conversion failed"
+            Just hyp' -> checkProof p' ((take z hyps ++ [hyp'] ++ drop (z+1) hyps) :|- goal)
+    | otherwise = invalid "Hypothesis out of range"
 
-implRule :: Term -> Proof -> Proof -> Proof
-implRule p pfPx pfXpq = Proof $ do
-    goal <- asks cxGoal
-    case goal of
-        q :% x -> do
-            subgoal [] (p :% x) pfPx
-            subgoal [] (Xi :% p :% q) pfXpq
-        _ -> fail "Goal is not in the form a b"
+checkProof (ImplRule p pfPx pfXpq) (hyps :|- q :% x) =
+    checkProof pfPx (hyps :|- p :% x) `mappend` 
+    checkProof pfXpq (hyps :|- Xi :% p :% q)
 
-xiRule :: (Name -> Proof) -> (Name -> Proof) -> Proof
-xiRule hproof xiproof = Proof $ do
-    goal <- asks cxGoal
-    case goal of
-        Xi :% a :% b -> do
-            name <- allocate
-            let nv = NameVar name
-            subgoal [] (H :% (a :% nv)) (hproof name)
-            subgoal [a :% nv] (b :% nv) (xiproof name)
-        _ -> fail "Goal is not in the form Xi a b"
+checkProof (XiRule name hproof xiproof) (hyps :|- Xi :% a :% b)
+    | nameFree a name && nameFree b name && all (`nameFree` name) hyps
+        = checkProof hproof (hyps :|- H :% (a :% n)) `mappend`
+          checkProof xiproof ((a :% n):hyps :|- b :% n)
+    | otherwise = invalid "Name not free in environment"
+    where
+    n = NameVar name
 
-hxiRule :: (Name -> Proof) -> (Name -> Proof) -> Proof
-hxiRule hproof hxiproof = Proof $ do
-    goal <- asks cxGoal
-    case goal of
-        H :% (Xi :% a :% b) -> do
-            name <- allocate
-            let nv = NameVar name
-            subgoal [] (H :% (a :% nv)) (hproof name)
-            subgoal [a :% nv] (H :% (b :% nv)) (hxiproof name)
-        _ -> fail "Goal is not in the form H (Xi a b)"
+checkProof (HXiRule name hproof hxiproof) (hyps :|- H :% (Xi :% a :% b))
+    | nameFree a name && nameFree b name && all (`nameFree` name) hyps
+        = checkProof hproof (hyps :|- H :% (a :% n)) `mappend`
+          checkProof hxiproof ((a :% n):hyps :|- H :% (b :% n))
+    | otherwise = invalid "Name not free in environment"
+    where
+    n = NameVar name
 
-hhRule :: Proof
-hhRule = Proof $ do
-    goal <- asks cxGoal
-    case goal of
-        H :% (H :% a) -> return ()
-        _ -> fail "Goal is not in the form H (H x)"
+checkProof HHRule (hyps :|- H :% (H :% x)) = valid
 
-theorem :: Theorem -> Proof
-theorem (Theorem t) = Proof $ do
-    goal <- asks cxGoal
-    assert (goal == t) $ "Goal does not match theorem: "
-                      ++ "\nGoal:    " ++ showTerm goal
-                      ++ "\nTheorem: " ++ showTerm t
+checkProof (Theorem (MkTheorem t _)) (hyps :|- goal)
+    | goal == t = valid
+    | otherwise = invalid "Goal does not match theorem"
 
-newtype Theorem = Theorem Term
+checkProof _ _ = invalid "Tactic does not match sequent"
+
+
+data Theorem = MkTheorem Term Proof
 
 instance Show Theorem where
-    show (Theorem t) = "|- " ++ show t
+    show (MkTheorem t _) = "|- " ++ show t
 
 thmStatement :: Theorem -> Term
-thmStatement (Theorem t) = t
+thmStatement (MkTheorem t _) = t
+
 
 prove :: Term -> Proof -> Either String Theorem
-prove term pf = right (const (Theorem term)) 
-              . (`State.evalState` [safeName term..])
-              . Error.runErrorT
-              . (`Reader.runReaderT` Context term [])
-              . checkProof $ pf
-
-right :: (b -> c) -> Either a b -> Either a c
-right f (Left x) = Left x
-right f (Right x) = Right (f x)
+prove stmt proof = 
+    case checkProof proof ([] :|- stmt) of
+        Error Nothing  -> Right (MkTheorem stmt proof)
+        Error (Just e) -> Left e
