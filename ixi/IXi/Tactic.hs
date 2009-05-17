@@ -1,5 +1,5 @@
 module IXi.Tactic
-    ( Tactic, Hypothesis, runTactic
+    ( Tactic, Hypothesis, runTactic, lift, mlift
 
     , withGoal
     , withHypStatement
@@ -55,6 +55,12 @@ runTactic :: Tactic f -> Term -> f P.Proof
 runTactic (Tactic tac) goal = runTacF tac seq
     where
     seq = Sequent { seqNumHyps = 0, seqHyps = [], seqGoal = goal }
+
+lift :: f P.Proof -> Tactic f
+lift = Tactic . TacF . const
+
+mlift :: (Monad f) => f (Tactic f) -> Tactic f
+mlift f = Tactic $ TacF $ \seq -> flip runTacF seq . getTacF =<< f
 
 withGoalF :: (Term -> TacF f a) -> TacF f a
 withGoalF f = withSequent (f . seqGoal)
