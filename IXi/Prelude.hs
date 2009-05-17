@@ -1,6 +1,7 @@
 module IXi.Prelude where
 
 import IXi.Term
+import IXi.Conversion
 import IXi.Proof
 import IXi.Helpers
 import Data.Monoid (Monoid(..))

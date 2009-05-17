@@ -1,6 +1,7 @@
 module IXi.Helpers where
 
 import IXi.Term
+import IXi.Conversion
 import Control.Monad.Trans.Writer
 import Control.Applicative
 import Data.Monoid

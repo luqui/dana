@@ -8,6 +8,7 @@ module IXi.Proof
 where
 
 import IXi.Term
+import IXi.Conversion
 import Control.Monad.Trans
 import qualified Control.Monad.Trans.Reader as Reader
 import qualified Control.Monad.Trans.State as State

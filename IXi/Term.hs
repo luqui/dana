@@ -5,16 +5,6 @@ module IXi.Term
     , unfree, free, freeNames
 
     , Name, safeName
-
-    , Conversion, convert
-    , convId, convTrans
-    , convInLambda, convInAppL, convInAppR
-    , convEtaContract, convEtaExpand
-    , convBetaReduce
-
-    , convExpandId, convExpandConst
-    , convExpandProj, convExpandLeft, convExpandRight
-    , convExpandLambda
     )
 where
 
@@ -112,71 +102,3 @@ freeNames (Lambda t) = freeNames t
 freeNames (t :% u) = freeNames t `Set.union` freeNames u
 freeNames (NameVar n) = Set.singleton n
 freeNames _ = Set.empty
-
-
-newtype Conversion = Conversion { convert :: Term -> Maybe Term }
-
-instance Monoid Conversion where
-    mempty = convId
-    mappend = convTrans
-
-convId = Conversion Just
-convTrans f g = Conversion (convert f >=> convert g)
-
-convInLambda conv = Conversion $ \t ->
-    case t of
-        Lambda t' -> Lambda <$> convert conv t'
-        _ -> Nothing
-
-convInAppL conv = Conversion $ \t ->
-    case t of
-        a :% b -> (:% b) <$> convert conv a
-        _ -> Nothing
-
-convInAppR conv = Conversion $ \t ->
-    case t of
-        a :% b -> (a :%) <$> convert conv b
-        _ -> Nothing
-
-convEtaContract = Conversion $ \t ->
-    case t of
-        Lambda (a :% Var 0) -> unfree 0 a
-        _ -> Nothing
-
-convEtaExpand = Conversion $ \t -> Just (Lambda (quote 0 t :% Var 0))
-
-convBetaReduce = Conversion $ \t ->
-    case t of
-        Lambda a :% b -> Just (subst 0 b a)
-        _ -> Nothing
-
--- X -> (\x. x) X
-convExpandId = Conversion $ \t -> Just (Lambda (Var 0) :% t)
--- X -> (\x. X) Y
-convExpandConst y = Conversion $ \t -> Just (Lambda (quote 0 t) :% y)
-
--- (\x. A) Z ((\x. B) Z) -> (\x. A B) Z
-convExpandProj = Conversion $ \t -> 
-    case t of
-        Lambda a :% z :% (Lambda b :% z') | z == z' -> 
-            Just (Lambda (a :% b) :% z)
-        _ -> Nothing
-
--- (\x. A) C B -> (\x. A B) C
-convExpandLeft = Conversion $ \t ->
-    case t of
-        Lambda a :% c :% b -> Just (Lambda (a :% quote 0 b) :% c)
-        _ -> Nothing
-
--- A ((\x. B) C) -> (\x. A B) C
-convExpandRight = Conversion $ \t ->
-    case t of
-        a :% (Lambda b :% c) -> Just (Lambda (quote 0 a :% b) :% c)
-        _ -> Nothing
-
--- \y. (\x. A) C -> (\x. \y. A) C      (y not free in C)
-convExpandLambda = Conversion $ \t ->
-    case t of
-        Lambda (Lambda a :% c) ->
-            (Lambda (Lambda (subst 0 (Var 1) a)) :%) <$> (unfree 0 c)
-        _ -> Nothing
