@@ -4,7 +4,7 @@ module IXi.Term
     , quote, subst, substNamed
     , unfree, free, freeNames, nameFree
 
-    , Name, safeName
+    , Name, safeName, safeName'
     )
 where
 
@@ -61,6 +61,11 @@ safeName (t :% u) = Name (max a b)
           Name b = safeName u
 safeName (NameVar n) = succ n
 safeName _ = Name 0
+
+safeName' :: [Term] -> Name
+safeName' = foldr max' (Name 0) . map safeName
+    where
+    max' (Name a) (Name b) = Name (max a b)
 
 quote :: Int -> Term -> Term
 quote n (Lambda t) = Lambda (quote (n+1) t)

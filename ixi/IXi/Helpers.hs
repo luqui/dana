@@ -54,3 +54,5 @@ convExpandK y = mconcat [
     convExpandId,
     convExpandConst y,
     convInAppL convExpandLambda ]
+
+convReduceK = mconcat [convBetaReduce, convBetaReduce]

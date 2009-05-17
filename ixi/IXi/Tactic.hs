@@ -1,8 +1,9 @@
 module IXi.Tactic
-    ( Tactic, runTactic
+    ( Tactic, Hypothesis, runTactic
 
     , withGoal
     , withHypStatement
+    , withFreshName
     
     , hypothesis
     , conversion
@@ -77,6 +78,11 @@ withGoal f = Tactic . withGoalF $ getTacF . f
 withHypStatement :: Hypothesis -> (Term -> Tactic f) -> Tactic f
 withHypStatement hyp f = Tactic . withSequent $ \seq -> getTacF (f (hypToTerm seq hyp))
 
+-- TODO: only considering the environment, and not auxiliary terms (i.e. those to be
+-- proven) may lead to bugs.
+withFreshName :: (Name -> Tactic f) -> Tactic f
+withFreshName f = Tactic . withSequent $ \seq -> 
+    getTacF (f (safeName' (seqGoal seq:seqHyps seq)))
 
 hypothesis :: (Alternative f) => Hypothesis -> Tactic f
 hypothesis hyp = Tactic . withSequent $ \seq -> 
