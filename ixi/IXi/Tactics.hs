@@ -20,7 +20,7 @@ _K = Lambda (Lambda (Var 1))
 --      G |- R    -- rest
 --
 assert :: (Alternative f) => Term -> Tactic f -> Tactic f -> (Hypothesis -> Tactic f) -> Tactic f
-assert goal hproof goalproof rest = withFreshName $ \xname -> 
+assert goal hproof goalproof rest = withFreshName [goal] $ \xname -> 
     let x = NameVar xname in
 
     conversion (convExpandK x) $
