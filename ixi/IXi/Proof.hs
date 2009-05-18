@@ -66,18 +66,18 @@ checkProof (ImplRule p pfPx pfXpq) (hyps :|- q :% x) =
     checkProof pfXpq (hyps :|- Xi :% p :% q)
 
 checkProof (XiRule name hproof xiproof) (hyps :|- Xi :% a :% b)
-    | nameFree a name && nameFree b name && all (`nameFree` name) hyps
+    | not (nameFree a name) && not (nameFree b name) && all (not . (`nameFree` name)) hyps
         = checkProof hproof (hyps :|- H :% (a :% n)) `mappend`
           checkProof xiproof ((a :% n):hyps :|- b :% n)
-    | otherwise = invalid "Name not free in environment"
+    | otherwise = invalid "Name free in environment"
     where
     n = NameVar name
 
 checkProof (HXiRule name hproof hxiproof) (hyps :|- H :% (Xi :% a :% b))
-    | nameFree a name && nameFree b name && all (`nameFree` name) hyps
+    | not (nameFree a name) && not (nameFree b name) && all (not . (`nameFree` name)) hyps
         = checkProof hproof (hyps :|- H :% (a :% n)) `mappend`
           checkProof hxiproof ((a :% n):hyps :|- H :% (b :% n))
-    | otherwise = invalid "Name not free in environment"
+    | otherwise = invalid "Name free in environment"
     where
     n = NameVar name
 

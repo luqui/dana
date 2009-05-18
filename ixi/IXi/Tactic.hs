@@ -1,5 +1,5 @@
 module IXi.Tactic
-    ( Tactic, Hypothesis, runTactic, lift, mlift
+    ( Tactic, Hypothesis, runTactic, lift, mlift, transform
 
     , withGoal
     , withHypStatement
@@ -62,6 +62,9 @@ lift = Tactic . TacF . const
 mlift :: (Monad f) => f (Tactic f) -> Tactic f
 mlift f = Tactic $ TacF $ \seq -> flip runTacF seq . getTacF =<< f
 
+transform :: (forall a. f a -> f a) -> Tactic f -> Tactic f
+transform f (Tactic (TacF t)) = Tactic (TacF (\seq -> f (t seq)))
+
 withGoalF :: (Term -> TacF f a) -> TacF f a
 withGoalF f = withSequent (f . seqGoal)
 
@@ -122,8 +125,8 @@ implRule p (Tactic pfPx) (Tactic pfXpq) = Tactic . withGoalF $ \goal ->
 xiRule :: (Alternative f) => Name -> Tactic f -> (Hypothesis -> Tactic f) -> Tactic f
 xiRule n (Tactic hproof) xiproof = Tactic . withSequent $ \seq ->
     case seqGoal seq of
-        Xi :% a :% b | all (flip nameFree n) (a:b:seqHyps seq)
-            -> P.xiRule n <$> subgoal (H :% a) hproof
+        Xi :% a :% b | all (not . flip nameFree n) (a:b:seqHyps seq)
+            -> P.xiRule n <$> subgoal (H :% (a :% NameVar n)) hproof
                           <*> withHyp (a :% NameVar n) 
                               (\hyp -> subgoal (b :% NameVar n) (getTacF (xiproof hyp)))
         _ -> empty
@@ -131,8 +134,8 @@ xiRule n (Tactic hproof) xiproof = Tactic . withSequent $ \seq ->
 hxiRule :: (Alternative f) => Name -> Tactic f -> (Hypothesis -> Tactic f) -> Tactic f
 hxiRule n (Tactic hproof) hxiproof = Tactic . withSequent $ \seq ->
     case seqGoal seq of
-        Xi :% a :% b | all (flip nameFree n) (a:b:seqHyps seq)
-            -> P.xiRule n <$> subgoal (H :% a) hproof
+        Xi :% a :% b | all (not . flip nameFree n) (a:b:seqHyps seq)
+            -> P.xiRule n <$> subgoal (H :% (a :% NameVar n)) hproof
                           <*> withHyp (a :% NameVar n) 
                               (\hyp -> subgoal (H :% (b :% NameVar n)) (getTacF (hxiproof hyp)))
         _ -> empty
