@@ -1,5 +1,6 @@
 module IXi.Sequent 
     ( Sequent(..)
+    , goal, hypotheses
     , Err
     , hypothesis, conversion, implRule
     , xiRule, hxiRule, hhRule
@@ -11,6 +12,12 @@ import IXi.Conversion
 
 infix 0 :|-
 data Sequent = [Term] :|- Term
+
+goal :: Sequent -> Term
+goal (h :|- g) = g
+
+hypotheses :: Sequent -> [Term]
+hypotheses (h :|- g) = h
 
 type Err = Either String
 
