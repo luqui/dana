@@ -111,5 +111,5 @@ freeNames (t :% u) = freeNames t `Set.union` freeNames u
 freeNames (NameVar n) = Set.singleton n
 freeNames _ = Set.empty
 
-nameFree :: Term -> Name -> Bool
-nameFree t n = n `Set.member` freeNames t
+nameFree :: Name -> Term -> Bool
+nameFree n t = n `Set.member` freeNames t
