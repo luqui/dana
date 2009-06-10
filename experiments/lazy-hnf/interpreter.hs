@@ -60,7 +60,7 @@ primify_ = fun (\n -> n % lit IInc % lit (IInt 0))
 sum_ = fix_ % fun (\self -> fun (\l -> 
     l % zero_ % fun (\x -> fun (\xs -> plus_ % x % (self % xs)))))
 
-program_ = primify_ % (exp_ % two_ % (exp_ % two_ % two_))
+program_ = fun (\x -> primify_ % (times_ % two_ % x))
 
 
 quoteInt :: Int -> Term a
