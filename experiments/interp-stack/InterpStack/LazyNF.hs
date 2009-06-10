@@ -1,8 +1,8 @@
-module LazyHNF.LazyNF 
+module InterpStack.LazyNF 
     ( lazyNFInterp )
 where
 
-import LazyHNF.Exp
+import InterpStack.Exp
 
 data Val a 
     = VLam (Val a)

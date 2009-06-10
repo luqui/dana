@@ -1,6 +1,6 @@
-module LazyHNF.HOAS (Term, (%), fun, lit, buildExp) where
+module InterpStack.HOAS (Term, (%), fun, lit, buildExp) where
 
-import qualified LazyHNF.Exp as C
+import qualified InterpStack.Exp as C
 import Control.Monad.State
 import qualified Data.Map as Map
 

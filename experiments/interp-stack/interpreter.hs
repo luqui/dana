@@ -1,6 +1,6 @@
-import LazyHNF.Exp
-import LazyHNF.LazyNF
-import LazyHNF.HOAS
+import InterpStack.Exp
+import InterpStack.LazyNF
+import InterpStack.HOAS
 import Debug.Trace
 import System.IO
 import System.Environment
