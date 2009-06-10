@@ -10,12 +10,8 @@ data IVal
 
 
 instance Value IVal where
-    applyValue (IInt z) _ = error "applyValue Int"
-    applyValue IInc v = do
-        x <- eval v
-        case x of
-            Left (IInt y) -> y `seq` return (makePrim (IInt (y+1)))
-            _ -> error "Incremented a non-number"
+    applyValue IInc (IInt z) = IInt (z+1)
+    applyValue _ _ = error "type error"
 
 id_ = fun (\x -> x)
 
@@ -36,13 +32,16 @@ fix_ = fun (\f -> fun (\x -> x % x) % fun (\x -> f % (x % x)))
 true_ = fun (\t -> fun (\f -> t))
 false_ = fun (\t -> fun (\f -> f))
 
+flip_ = fun (\f -> fun (\x -> fun (\y -> f % y % x)))
+compose_ = fun (\f -> fun (\g -> fun (\y -> f % (g % y))))
+
 let_ v f = f % v
 
 head_ = fun (\list -> list % lit (error "head_: empty list") % fun (\x -> fun (\xs -> x)))
 tail_ = fun (\list -> list % lit (error "tail_: empty list") % fun (\x -> fun (\xs -> xs)))
 at_ = fun (\n -> fun (\xs -> head_ % (n % tail_ % xs)))
 
-eVar_ = fun (\v' -> fun (\v -> fun (\l -> fun (\a -> fun (\p -> v' % v)))))
+eVar_ = fun (\v' -> fun (\v -> fun (\l -> fun (\a -> fun (\p -> v % v')))))
 eLam_ = fun (\body -> fun (\v -> fun (\l -> fun (\a -> fun (\p -> l % body)))))
 eApp_ = fun (\left -> fun (\right -> fun (\v -> fun (\l -> fun (\a -> fun (\p -> a % left % right))))))
 eLit_ = fun (\litval -> fun (\v -> fun (\l -> fun (\a -> fun (\p -> p % litval)))))
@@ -61,9 +60,7 @@ primify_ = fun (\n -> n % lit IInc % lit (IInt 0))
 sum_ = fix_ % fun (\self -> fun (\l -> 
     l % zero_ % fun (\x -> fun (\xs -> plus_ % x % (self % xs)))))
 
-program_ = primify_ % (sum_ % thelist)
-    where
-    thelist = cons_ % two_ % (cons_ % one_ % (cons_ % two_ % nil_))
+program_ = primify_ % (exp_ % two_ % (exp_ % two_ % two_))
 
 
 quoteInt :: Int -> Term a
@@ -80,9 +77,5 @@ quote = buildExp . go
 layer :: Exp a -> Exp a
 layer x = buildExp (eInterp_ % nil_) :% quote x
 
-run :: Exp IVal -> IO Int
-run exp = runEval (fmap showVal $ eval =<< compile exp)
-    where
-    showVal (Left (IInt z)) = z
-    showVal (Left _) = error "Not an integer primitive"
-    showVal (Right _) = error "Function returned"
+run :: Exp IVal -> Val IVal
+run = eval
