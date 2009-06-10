@@ -1,9 +1,11 @@
 import LazyHNF.Compiler
 import LazyHNF.HOAS
+import Debug.Trace
 
 data IVal
     = IInt !Int
     | IInc
+    deriving Show
 
 
 instance Value IVal where
@@ -46,12 +48,24 @@ eLit_ = fun (\litval -> fun (\v -> fun (\l -> fun (\a -> fun (\p -> p % litval))
 
 
 eInterp_ = fix_ % fun (\interp -> fun (\env -> fun (\ast ->
-    ast % fun (\ix -> at_ % ix % env)  -- var
+    ast % fun (\ix -> at_ % ix % env)
         % fun (\body -> fun (\x -> interp % (cons_ % x % env) % body))
-        % fun (\left -> fun (\right -> interp % env % left % (interp % env % right))) -- app
+        % fun (\left -> fun (\right -> interp % env % left % (interp % env % right)))
         % fun (\lt -> lt))))
 
-program_ = exp_ % two_ % (plus_ % two_ % two_) % lit IInc % lit (IInt 0)
+program_ = fun (\x -> fun (\y -> y)) % fun (\x -> x) % lit (IInt 0)
+
+{-
+(\x -> subst 0 x (\y -> subst 1 y "1")) %% (\x -> subst 2 x "2") %% Prim 0
+subst 0 (\x -> subst 2 x "2") (\y -> subst 1 y "1") %% Prim 0
+                              (subst 1 "3" "1") = f'
+                              (subst 0 (\x -> subst 2 x "2") (subst 1 "3" "1")) = f''
+(\x -> subst 3 x (subst 0 (\x -> subst 2 x "2") (subst 1 "3" "1"))) %% Prim 0
+subst 3 (Prim 0) (subst 0 (\x -> subst 2 x "2") (subst 1 "3" "1"))
+subst 3 (Prim 0) (subst 0 (\x -> subst 2 x "2") "3")
+subst 3 (Prim 0) "3"
+Prim 0
+-}
 
 
 quoteInt :: Int -> Term a
@@ -67,3 +81,10 @@ quote = buildExp . go
     go (Var z) = eVar_ % quoteInt z
     go (Lit a) = eLit_ % lit a
 
+
+run :: Exp IVal -> Int
+run exp = runEval (fmap showVal $ eval =<< compile exp)
+    where
+    showVal (Left (IInt z)) = z
+    showVal (Left _) = error "Not an integer primitive"
+    showVal (Right _) = error "Function returned"
