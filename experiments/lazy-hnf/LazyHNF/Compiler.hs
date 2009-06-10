@@ -45,13 +45,12 @@ newName f = Eval $ do
 infixl 9 %%
 (%%) :: (Value a) => Val a -> Val a -> Eval (Val a)
 (%%) (VFun f) x = f x
-(%%) (VNeutral f) x = return . VNeutral $ \from to -> f from to >>= (%% x)
+(%%) (VNeutral f) x = return . VNeutral $ \from to -> do
+        left' <- f from to
+        right' <- subst from to x
+        left' %% right'
 (%%) (VPrim a) (VNeutral f) = return . VNeutral $ \name val -> (VPrim a %%) =<< f name val
 (%%) (VPrim a) b = applyValue a b
-
-showt (VFun _) = "fun"
-showt (VNeutral _) = "neutral"
-showt (VPrim _) = "prim"
 
 -- does this destroy necessary sharing?
 subst :: Name -> Val a -> Val a -> Eval (Val a)

@@ -53,19 +53,7 @@ eInterp_ = fix_ % fun (\interp -> fun (\env -> fun (\ast ->
         % fun (\left -> fun (\right -> interp % env % left % (interp % env % right)))
         % fun (\lt -> lt))))
 
-program_ = fun (\x -> fun (\y -> y)) % fun (\x -> x) % lit (IInt 0)
-
-{-
-(\x -> subst 0 x (\y -> subst 1 y "1")) %% (\x -> subst 2 x "2") %% Prim 0
-subst 0 (\x -> subst 2 x "2") (\y -> subst 1 y "1") %% Prim 0
-                              (subst 1 "3" "1") = f'
-                              (subst 0 (\x -> subst 2 x "2") (subst 1 "3" "1")) = f''
-(\x -> subst 3 x (subst 0 (\x -> subst 2 x "2") (subst 1 "3" "1"))) %% Prim 0
-subst 3 (Prim 0) (subst 0 (\x -> subst 2 x "2") (subst 1 "3" "1"))
-subst 3 (Prim 0) (subst 0 (\x -> subst 2 x "2") "3")
-subst 3 (Prim 0) "3"
-Prim 0
--}
+program_ = fun (\x -> fun (\y -> x % y)) % lit IInc % lit (IInt 0)
 
 
 quoteInt :: Int -> Term a
