@@ -1,7 +1,9 @@
 import LazyHNF.Exp
-import LazyHNF.LazyHNF
+import LazyHNF.LazyNF
 import LazyHNF.HOAS
 import Debug.Trace
+import System.IO
+import System.Environment
 
 data IVal
     = IInt !Int
@@ -74,8 +76,21 @@ quote = buildExp . go
     go (Var z) = eVar_ % quoteInt z
     go (Lit a) = eLit_ % lit a
 
+forceExp :: Exp a -> Exp a
+forceExp (t :% u) = forceExp t `seq` forceExp u `seq` (t :% u)
+forceExp (Lam body) = forceExp body `seq` Lam body
+forceExp (Var z) = Var z
+forceExp (Lit a) = Lit a
+
 layer :: Exp a -> Exp a
 layer x = buildExp (eInterp_ % nil_) :% quote x
 
-run :: Exp IVal -> Val IVal
-run = eval
+run :: Exp IVal -> Maybe IVal
+run exp = getVal (eval exp)
+
+iter n = foldr (.) id . replicate n
+
+main = do
+    [n] <- getArgs
+    hSetBuffering stdout NoBuffering
+    print $ run . iter (read n) layer . buildExp $ program_

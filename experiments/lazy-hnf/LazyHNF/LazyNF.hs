@@ -1,5 +1,5 @@
-module LazyHNF.LazyHNF 
-    ( Val, Value(..), eval )
+module LazyHNF.LazyNF 
+    ( Val, Value(..), eval, getVal )
 where
 
 import LazyHNF.Exp
@@ -14,26 +14,26 @@ data Val a
 class Value v where
     applyValue :: v -> v -> v
 
-quote :: Val a -> Val a
-quote = go 0
+quote :: Int -> Val a -> Val a
+quote by = go 0
     where
     go n (VLam a) = VLam (go (n+1) a)
     go n (VApp a b) = VApp (go n a) (go n b)
-    go n (VVar z) | n <= z = VVar (z+1)
-                 | otherwise = VVar z
+    go n (VVar z) | n <= z = VVar (z+by)
+                  | otherwise = VVar z
     go n (VPrim p) = VPrim p
 
 subst :: (Value a) => Val a -> Val a -> Val a
-subst = go 0
+subst = go 0 0
     where
-    go n to (VLam body) = VLam (go (n+1) (quote to) body)
-    go n to (VApp a b) = go n to a %% go n to b
-    go n to (VVar z) =
+    go n q to (VLam body) = VLam (go (n+1) (q+1) to body)
+    go n q to (VApp a b) = go n q to a %% go n q to b
+    go n q to (VVar z) =
         case compare n z of
             LT -> VVar (z-1)
-            EQ -> to
+            EQ -> quote q to
             GT -> VVar z
-    go n to (VPrim p) = VPrim p
+    go n q to (VPrim p) = VPrim p
 
 (%%) :: (Value a) => Val a -> Val a -> Val a
 VLam body %% arg = subst arg body
@@ -42,6 +42,9 @@ VPrim p %% VLam body = error "Cannot apply a primitive to a lambda"
 VPrim p %% t = VApp (VPrim p) t
 exp %% arg = VApp exp arg
 
+getVal :: Val a -> Maybe a
+getVal (VPrim a) = Just a
+getVal _ = Nothing
 
 
 eval :: (Value a) => Exp a -> Val a
