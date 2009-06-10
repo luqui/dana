@@ -53,7 +53,8 @@ eInterp_ = fix_ % fun (\interp -> fun (\env -> fun (\ast ->
         % fun (\left -> fun (\right -> interp % env % left % (interp % env % right)))
         % fun (\lt -> lt))))
 
-program_ = fun (\x -> fun (\y -> x % y)) % lit IInc % lit (IInt 0)
+--program_ = (exp_ % two_ % two_) % lit IInc % lit (IInt 0)
+program_ = one_ % lit IInc % lit (IInt 0)
 
 
 quoteInt :: Int -> Term a
@@ -69,8 +70,10 @@ quote = buildExp . go
     go (Var z) = eVar_ % quoteInt z
     go (Lit a) = eLit_ % lit a
 
+layer :: Exp a -> Exp a
+layer x = buildExp (eInterp_ % nil_) :% quote x
 
-run :: Exp IVal -> Int
+run :: Exp IVal -> IO Int
 run exp = runEval (fmap showVal $ eval =<< compile exp)
     where
     showVal (Left (IInt z)) = z

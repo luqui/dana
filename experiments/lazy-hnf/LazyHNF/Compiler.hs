@@ -2,9 +2,8 @@ module LazyHNF.Compiler
     (Exp(..), Eval, Val, Value(..), eval, makePrim, compile, runEval, (%%)) 
 where
 
-import Control.Monad.State
+import Data.Supply
 import Control.Monad.Instances
-import Control.Applicative
 
 type Name = Integer
 
@@ -16,8 +15,14 @@ data Exp a
     | Lit a
     deriving (Show)
 
-newtype Eval a = Eval { unEval :: State Name a }
-    deriving (Functor, Monad)
+newtype Eval a = Eval { unEval :: Supply Name -> a }
+    deriving Functor
+
+instance Monad Eval where
+    return = Eval . const
+    m >>= f = Eval $ \s ->
+        let (s1,s2) = split2 s in
+        unEval (f (unEval m s1)) s2
 
 data Val a
     = VNeutral (Name -> Val a -> Eval (Val a))
@@ -36,11 +41,11 @@ makePrim :: a -> Val a
 makePrim = VPrim
 
 
+getName :: Eval Name
+getName = Eval supplyValue
+
 newName :: (Name -> Eval a) -> Eval a
-newName f = Eval $ do
-    z <- get
-    put $! z+1
-    unEval (f z)
+newName f = f =<< getName
 
 infixl 9 %%
 (%%) :: (Value a) => Val a -> Val a -> Eval (Val a)
@@ -82,5 +87,5 @@ neutral name = r
     where
     r = VNeutral (\from -> if from == name then return else const (return r))
 
-runEval :: Eval a -> a
-runEval e = evalState (unEval e) 0
+runEval :: Eval a -> IO a
+runEval e = fmap (unEval e) $ newSupply 0 succ
