@@ -1,19 +1,12 @@
-module LazyHNF.Compiler 
+module LazyHNF.LazyHNF 
     (Exp(..), Eval, Val, Value(..), eval, makePrim, compile, runEval, (%%)) 
 where
 
+import LazyHNF.Exp
 import Data.Supply
 import Control.Monad.Instances
 
 type Name = Integer
-
-infixl 9 :%
-data Exp a
-    = Exp a :% Exp a
-    | Lam (Exp a)
-    | Var Int
-    | Lit a
-    deriving (Show)
 
 newtype Eval a = Eval { unEval :: Supply Name -> a }
     deriving Functor

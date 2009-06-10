@@ -1,4 +1,5 @@
-import LazyHNF.Compiler
+import LazyHNF.Exp
+import LazyHNF.LazyHNF
 import LazyHNF.HOAS
 import Debug.Trace
 
@@ -54,13 +55,19 @@ eInterp_ = fix_ % fun (\interp -> fun (\env -> fun (\ast ->
         % fun (\lt -> lt))))
 
 --program_ = (exp_ % two_ % two_) % lit IInc % lit (IInt 0)
-program_ = one_ % lit IInc % lit (IInt 0)
+
+primify_ = fun (\n -> n % lit IInc % lit (IInt 0))
+
+sum_ = fix_ % fun (\self -> fun (\l -> 
+    l % zero_ % fun (\x -> fun (\xs -> plus_ % x % (self % xs)))))
+
+program_ = primify_ % (sum_ % thelist)
+    where
+    thelist = cons_ % two_ % (cons_ % one_ % (cons_ % two_ % nil_))
 
 
 quoteInt :: Int -> Term a
-quoteInt z = foldr compose id_ (replicate z succ_) % zero_
-    where
-    compose a b = fun (\x -> a % (b % x))
+quoteInt z = fun (\f -> fun (\x -> foldr (%) x (replicate z f)))
 
 quote :: Exp a -> Exp a
 quote = buildExp . go
