@@ -15,6 +15,7 @@ data Exp a
     | Lam (Exp a)
     | Var Int
     | Lit a
+    deriving (Show)
 
 newtype Eval a = Eval { unEval :: Sup -> a }
     deriving (Functor, Applicative, Monad)
