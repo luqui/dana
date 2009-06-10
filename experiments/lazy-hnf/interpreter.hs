@@ -86,7 +86,7 @@ layer :: Exp a -> Exp a
 layer x = buildExp (eInterp_ % nil_) :% quote x
 
 run :: Exp IVal -> Maybe IVal
-run exp = getVal (eval exp)
+run = eval lazyNFInterp
 
 iter n = foldr (.) id . replicate n
 

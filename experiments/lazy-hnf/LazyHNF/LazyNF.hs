@@ -1,5 +1,5 @@
 module LazyHNF.LazyNF 
-    ( Val, Value(..), eval, getVal )
+    ( lazyNFInterp )
 where
 
 import LazyHNF.Exp
@@ -10,9 +10,6 @@ data Val a
     | VVar Int
     | VPrim a
     deriving (Show)
-
-class Value v where
-    applyValue :: v -> v -> v
 
 quote :: Int -> Val a -> Val a
 quote by = go 0
@@ -42,13 +39,14 @@ VPrim p %% VLam body = error "Cannot apply a primitive to a lambda"
 VPrim p %% t = VApp (VPrim p) t
 exp %% arg = VApp exp arg
 
-getVal :: Val a -> Maybe a
-getVal (VPrim a) = Just a
-getVal _ = Nothing
+lazyNFInterp = Interp {
+    eval = getValNF . evalNF
+}
 
+getValNF (VPrim a) = Just a
+getValNF _ = Nothing
 
-eval :: (Value a) => Exp a -> Val a
-eval (a :% b) = eval a %% eval b
-eval (Lam body) = VLam (eval body)
-eval (Var z) = VVar z
-eval (Lit p) = VPrim p
+evalNF (a :% b) = evalNF a %% evalNF b
+evalNF (Lam body) = VLam (evalNF body)
+evalNF (Var z) = VVar z
+evalNF (Lit p) = VPrim p
