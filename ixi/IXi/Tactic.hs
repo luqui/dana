@@ -3,6 +3,7 @@ module IXi.Tactic
     , hypothesis, conversion, implRule, xiRule, hxiRule, hhRule, xihRule, theorem
     , inspect, (>|<)
     , newName
+    , prove
     )
 where
 
@@ -78,3 +79,12 @@ newName f = Tactic $ \seq -> unTactic (f (Seq.newName seq)) seq
 infixr 1 >|<
 (>|<) :: Tactic -> Tactic -> Tactic
 t >|< u = Tactic $ liftA2 mplus (unTactic t) (unTactic u)
+
+runTactic :: Tactic -> Seq.Sequent -> Seq.Err P.Proof
+runTactic (Tactic t) = t
+
+prove :: Term -> Tactic -> P.Theorem
+prove stmt tac =
+    case P.prove stmt =<< runTactic tac ([] Seq.:|- stmt) of
+        Left e -> error $ "Invalid proof: " ++ e
+        Right thm -> thm
