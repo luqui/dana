@@ -1,6 +1,6 @@
 module IXi.Tactic 
     ( Tactic, Hypothesis
-    , hypothesis, conversion, implRule, xiRule, hxiRule, hhRule, xihRule
+    , hypothesis, conversion, implRule, xiRule, hxiRule, hhRule, xihRule, theorem
     , inspect, (>|<)
     , newName
     )
@@ -62,6 +62,12 @@ xihRule (Hypothesis z) = Tactic $ \seq -> do
     let ix = length (Seq.hypotheses seq) - z - 1
     () <- Seq.xihRule ix seq
     return (P.xihRule ix)
+
+theorem :: P.Theorem -> Tactic
+theorem thm = Tactic $ \seq -> do
+    if P.thmStatement thm == Seq.goal seq
+        then return (P.theorem thm)
+        else fail "Theorem does not match goal"
 
 inspect :: (Seq.Sequent -> Tactic) -> Tactic
 inspect f = Tactic $ \seq -> unTactic (f seq) seq
