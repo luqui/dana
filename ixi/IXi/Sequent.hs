@@ -58,7 +58,7 @@ xiRule _ _ = invalid "Goal is not a Xi-form"
 hxiRule :: Name -> Sequent -> Err (Sequent, Sequent)
 hxiRule name (hyps :|- H :% (Xi :% a :% b))
     | nameFree name a || nameFree name b || any (nameFree name) hyps
-        = invalid "Name must no be free in environment"
+        = invalid "Name must not be free in environment"
     | otherwise
         = valid (hyps :|- H :% (a :% n), (a :% n):hyps :|- H :% (b :% n))
     where n = NameVar name
@@ -72,8 +72,8 @@ newName :: Sequent -> Name
 newName seq = safeName' (goal seq : hypotheses seq)
 
 -- conservative extension, Γ,x |- Hx
-xihRule :: Int -> Sequent -> Err ()
-xihRule z (hyps :|- goal)
-    | not (0 <= z && z <= length hyps) = invalid "Index out of range"
-    | not (H :% (hyps !! z) == goal) = invalid "Hypothesis does not match goal"
-    | otherwise = valid ()
+xihRule :: Sequent -> Err Sequent
+xihRule (hyps :|- goal) =
+    case goal of 
+        H :% x -> valid (hyps :|- x)
+        _ -> invalid "Goal is not an H-form"

@@ -1,6 +1,6 @@
 module IXi.Tactic 
-    ( Tactic, Hypothesis
-    , hypothesis, conversion, implRule, xiRule, hxiRule, hhRule, xihRule, theorem
+    ( Tactic
+    , conversion, implRule, xiRule, hxiRule, hhRule, xihRule, theorem
     , inspect, (>|<)
     , newName
     , prove
@@ -15,16 +15,13 @@ import Control.Applicative
 import Control.Monad (ap, MonadPlus(..))
 
 newtype Tactic = Tactic { unTactic :: Seq.Sequent -> Seq.Err P.Proof }
-newtype Hypothesis = Hypothesis Int  -- index from the end
 
-topHyp :: Seq.Sequent -> Hypothesis
-topHyp seq = Hypothesis (length (Seq.hypotheses seq) - 1)
-
-hypothesis :: Hypothesis -> Tactic
-hypothesis (Hypothesis z) = Tactic $ \seq -> do
-    let ix = length (Seq.hypotheses seq) - z - 1
-    () <- Seq.hypothesis ix seq
+topHyp :: Seq.Sequent -> Tactic
+topHyp seq = Tactic $ \seq' -> do
+    () <- Seq.hypothesis ix seq'
     return (P.hypothesis ix)
+    where
+    ix = length (Seq.hypotheses seq) - 1
 
 conversion :: Conversion -> Tactic -> Tactic
 conversion conv rest = Tactic $ \seq -> do
@@ -39,14 +36,14 @@ implRule p pxTac xpqTac = Tactic $ \seq -> do
     xpqPf <- unTactic xpqTac xpqSeq
     return (P.implRule p pxPf xpqPf)
 
-xiRule :: Name -> Tactic -> (Hypothesis -> Tactic) -> Tactic
+xiRule :: Name -> Tactic -> (Tactic -> Tactic) -> Tactic
 xiRule name hTac implTac = Tactic $ \seq -> do
     (hSeq, implSeq) <- Seq.xiRule name seq
     hPf <- unTactic hTac hSeq
     implPf <- unTactic (implTac (topHyp implSeq)) implSeq
     return (P.xiRule name hPf implPf)
 
-hxiRule :: Name -> Tactic -> (Hypothesis -> Tactic) -> Tactic
+hxiRule :: Name -> Tactic -> (Tactic -> Tactic) -> Tactic
 hxiRule name hTac implTac = Tactic $ \seq -> do
     (hSeq, implSeq) <- Seq.hxiRule name seq
     hPf <- unTactic hTac hSeq
@@ -58,11 +55,11 @@ hhRule = Tactic $ \seq -> do
     () <- Seq.hhRule seq
     return P.hhRule
 
-xihRule :: Hypothesis -> Tactic
-xihRule (Hypothesis z) = Tactic $ \seq -> do
-    let ix = length (Seq.hypotheses seq) - z - 1
-    () <- Seq.xihRule ix seq
-    return (P.xihRule ix)
+xihRule :: Tactic -> Tactic
+xihRule tac = Tactic $ \seq -> do
+    seq' <- Seq.xihRule seq
+    pf <- unTactic tac seq'
+    return (P.xihRule pf)
 
 theorem :: P.Theorem -> Tactic
 theorem thm = Tactic $ \seq -> do

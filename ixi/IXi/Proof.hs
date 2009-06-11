@@ -20,7 +20,7 @@ data Proof
     | XiRule Name Proof Proof
     | HXiRule Name Proof Proof
     | HHRule
-    | XIHRule Int
+    | XIHRule Proof
     | Theorem Theorem
 
 hypothesis = Hypothesis
@@ -56,7 +56,9 @@ checkProof (HXiRule name hproof hxiproof) seq = do
 
 checkProof HHRule seq = S.hhRule seq
 
-checkProof (XIHRule z) seq = S.xihRule z seq
+checkProof (XIHRule pf) seq = do
+    seq' <- S.xihRule seq
+    checkProof pf seq'
 
 checkProof (Theorem (MkTheorem t _)) (hyps S.:|- goal)
     | goal == t = Right ()
