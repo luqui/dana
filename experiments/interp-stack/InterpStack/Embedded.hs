@@ -15,14 +15,11 @@ data AST
     | SPrim Any
 
 makeAST :: (Value a) => Exp a -> AST
-makeAST = go False
-    where
-    go eta (Lam body) = SLam (go False body)
-    go eta (t :% u) = SApp (go True t) (go False u)
-    go eta (Var v) = SVar v
-    go eta (Lit l)
-        | eta = SPrim (unsafeCoerce (applyValue l))
-        | otherwise = SPrim (unsafeCoerce l)
+makeAST (Lam body) = SLam (makeAST body)
+makeAST (t :% u) = SApp (makeAST t) (makeAST u)
+makeAST (Var v) = SVar v
+makeAST (Lit l) = SPrim $
+    if canApply l then unsafeCoerce (applyValue l) else unsafeCoerce l
 
 unfree :: Int -> AST -> Maybe AST
 unfree n (SLam body) = SLam <$> unfree (n+1) body

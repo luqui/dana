@@ -16,6 +16,9 @@ instance Value IVal where
     applyValue IInc (IInt z) = IInt (z+1)
     applyValue _ _ = error "type error"
 
+    canApply (IInt _) = False
+    canApply IInc = True
+
 id_ = fun (\x -> x)
 
 zero_ = fun (\f -> fun (\x -> x))
@@ -56,7 +59,7 @@ eInterp_ = fix_ % fun (\interp -> fun (\env -> fun (\ast ->
         % fun (\left -> fun (\right -> interp % env % left % (interp % env % right)))
         % fun (\lt -> lt))))
 
-primify_ = fun (\n -> n % fun (\x -> lit IInc % x) % lit (IInt 0))
+primify_ = fun (\n -> n % lit IInc % lit (IInt 0))
 
 sum_ = fix_ % fun (\self -> fun (\l -> 
     l % zero_ % fun (\x -> fun (\xs -> plus_ % x % (self % xs)))))

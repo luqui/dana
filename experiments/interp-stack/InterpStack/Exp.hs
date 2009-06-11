@@ -12,6 +12,7 @@ data Exp a
 
 class Value v where
     applyValue :: v -> v -> v
+    canApply :: v -> Bool
 
 data Interp = Interp {
     eval :: forall v. (Value v) => Exp v -> Maybe v
