@@ -1,8 +1,8 @@
 module IXi.Tactic 
-    ( Tactic
+    ( Tactic, Hypothesis
     , conversion, implRule, xiRule, hxiRule, hhRule, xihRule, theorem
     , inspect, (>|<)
-    , newName
+    , newName, failure
     , prove
     )
 where
@@ -15,11 +15,13 @@ import Control.Applicative
 import Control.Monad (ap, MonadPlus(..))
 
 newtype Tactic = Tactic { unTactic :: Seq.Sequent -> Seq.Err P.Proof }
+type Hypothesis = Tactic
 
 topHyp :: Seq.Sequent -> Tactic
 topHyp seq = Tactic $ \seq' -> do
-    () <- Seq.hypothesis ix seq'
-    return (P.hypothesis ix)
+    let ix' = length (Seq.hypotheses seq') - ix - 1
+    () <- Seq.hypothesis ix' seq'
+    return (P.hypothesis ix')
     where
     ix = length (Seq.hypotheses seq) - 1
 
@@ -36,14 +38,14 @@ implRule p pxTac xpqTac = Tactic $ \seq -> do
     xpqPf <- unTactic xpqTac xpqSeq
     return (P.implRule p pxPf xpqPf)
 
-xiRule :: Name -> Tactic -> (Tactic -> Tactic) -> Tactic
+xiRule :: Name -> Tactic -> (Hypothesis -> Tactic) -> Tactic
 xiRule name hTac implTac = Tactic $ \seq -> do
     (hSeq, implSeq) <- Seq.xiRule name seq
     hPf <- unTactic hTac hSeq
     implPf <- unTactic (implTac (topHyp implSeq)) implSeq
     return (P.xiRule name hPf implPf)
 
-hxiRule :: Name -> Tactic -> (Tactic -> Tactic) -> Tactic
+hxiRule :: Name -> Tactic -> (Hypothesis -> Tactic) -> Tactic
 hxiRule name hTac implTac = Tactic $ \seq -> do
     (hSeq, implSeq) <- Seq.hxiRule name seq
     hPf <- unTactic hTac hSeq
@@ -55,7 +57,7 @@ hhRule = Tactic $ \seq -> do
     () <- Seq.hhRule seq
     return P.hhRule
 
-xihRule :: Tactic -> Tactic
+xihRule :: Hypothesis -> Tactic
 xihRule tac = Tactic $ \seq -> do
     seq' <- Seq.xihRule seq
     pf <- unTactic tac seq'
@@ -72,6 +74,9 @@ inspect f = Tactic $ \seq -> unTactic (f seq) seq
 
 newName :: (Name -> Tactic) -> Tactic
 newName f = Tactic $ \seq -> unTactic (f (Seq.newName seq)) seq
+
+failure :: Tactic
+failure = Tactic $ \seq -> mzero
 
 infixr 1 >|<
 (>|<) :: Tactic -> Tactic -> Tactic
