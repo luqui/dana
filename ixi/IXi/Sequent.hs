@@ -3,7 +3,8 @@ module IXi.Sequent
     , goal, hypotheses
     , Err
     , hypothesis, conversion, implRule
-    , xiRule, hxiRule, hhRule
+    , xiRule, hxiRule, hhRule, xihRule
+    , newName
     )
 where
 
@@ -66,3 +67,13 @@ hxiRule _ _ = invalid "Goal is not an H-Xi-form"
 hhRule :: Sequent -> Err ()
 hhRule (hyps :|- H :% (H :% x)) = valid ()
 hhRule _ = invalid "Goal is not an H-H-form"
+
+newName :: Sequent -> Name
+newName seq = safeName' (goal seq : hypotheses seq)
+
+-- conservative extension, Γ,x |- Hx
+xihRule :: Int -> Sequent -> Err ()
+xihRule z (hyps :|- goal)
+    | not (0 <= z && z <= length hyps) = invalid "Index out of range"
+    | not (H :% (hyps !! z) == goal) = invalid "Hypothesis does not match goal"
+    | otherwise = valid ()

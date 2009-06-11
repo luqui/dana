@@ -1,7 +1,7 @@
 module IXi.Proof 
     ( Proof
     , hypothesis, conversion
-    , implRule, xiRule, hxiRule, hhRule
+    , implRule, xiRule, hxiRule, hhRule, xihRule
     , theorem
     , Theorem, thmStatement, prove
     )
@@ -20,6 +20,7 @@ data Proof
     | XiRule Name Proof Proof
     | HXiRule Name Proof Proof
     | HHRule
+    | XIHRule Int
     | Theorem Theorem
 
 hypothesis = Hypothesis
@@ -28,6 +29,7 @@ implRule = ImplRule
 xiRule = XiRule
 hxiRule = HXiRule
 hhRule = HHRule
+xihRule = XIHRule
 theorem = Theorem
 
 
@@ -54,10 +56,11 @@ checkProof (HXiRule name hproof hxiproof) seq = do
 
 checkProof HHRule seq = S.hhRule seq
 
+checkProof (XIHRule z) seq = S.xihRule z seq
+
 checkProof (Theorem (MkTheorem t _)) (hyps S.:|- goal)
     | goal == t = Right ()
     | otherwise = Left "Goal does not match theorem"
-
 
 data Theorem = MkTheorem Term Proof
 

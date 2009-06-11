@@ -1,7 +1,8 @@
 module IXi.Tactic 
     ( Tactic, Hypothesis
-    , hypothesis, conversion, implRule, xiRule, hxiRule, hhRule
+    , hypothesis, conversion, implRule, xiRule, hxiRule, hhRule, xihRule
     , inspect, (>|<)
+    , newName
     )
 where
 
@@ -56,8 +57,17 @@ hhRule = Tactic $ \seq -> do
     () <- Seq.hhRule seq
     return P.hhRule
 
+xihRule :: Hypothesis -> Tactic
+xihRule (Hypothesis z) = Tactic $ \seq -> do
+    let ix = length (Seq.hypotheses seq) - z - 1
+    () <- Seq.xihRule ix seq
+    return (P.xihRule ix)
+
 inspect :: (Seq.Sequent -> Tactic) -> Tactic
 inspect f = Tactic $ \seq -> unTactic (f seq) seq
+
+newName :: (Name -> Tactic) -> Tactic
+newName f = Tactic $ \seq -> unTactic (f (Seq.newName seq)) seq
 
 infixr 1 >|<
 (>|<) :: Tactic -> Tactic -> Tactic
