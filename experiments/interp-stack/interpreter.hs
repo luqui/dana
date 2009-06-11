@@ -1,5 +1,6 @@
 import InterpStack.Exp
 import InterpStack.LazyNF
+import InterpStack.Embedded
 import InterpStack.HOAS
 import Debug.Trace
 import System.IO
@@ -55,14 +56,12 @@ eInterp_ = fix_ % fun (\interp -> fun (\env -> fun (\ast ->
         % fun (\left -> fun (\right -> interp % env % left % (interp % env % right)))
         % fun (\lt -> lt))))
 
---program_ = (exp_ % two_ % two_) % lit IInc % lit (IInt 0)
-
-primify_ = fun (\n -> n % lit IInc % lit (IInt 0))
+primify_ = fun (\n -> n % fun (\x -> lit IInc % x) % lit (IInt 0))
 
 sum_ = fix_ % fun (\self -> fun (\l -> 
     l % zero_ % fun (\x -> fun (\xs -> plus_ % x % (self % xs)))))
 
-program_ = fun (\x -> primify_ % (times_ % two_ % x))
+program_ = fun (\x -> primify_ % (times_ % two_ % x)) % two_
 
 
 quoteInt :: Int -> Term a
@@ -85,12 +84,12 @@ forceExp (Lit a) = Lit a
 layer :: Exp a -> Exp a
 layer x = buildExp (eInterp_ % nil_) :% quote x
 
-run :: Exp IVal -> Maybe IVal
-run = eval lazyNFInterp
-
 iter n = foldr (.) id . replicate n
 
 main = do
-    [n] <- getArgs
+    [interpStr, n] <- getArgs
+    let interp = case interpStr of
+            "lazyNF" -> lazyNFInterp
+            "embedded" -> embeddedInterp
     hSetBuffering stdout NoBuffering
-    print $ run . iter (read n) layer . buildExp $ program_
+    print . eval interp . iter (read n) layer . buildExp $ program_
