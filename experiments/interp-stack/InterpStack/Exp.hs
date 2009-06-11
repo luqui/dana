@@ -1,3 +1,5 @@
+{-# LANGUAGE RankNTypes #-}
+
 module InterpStack.Exp where
 
 infixl 9 :%

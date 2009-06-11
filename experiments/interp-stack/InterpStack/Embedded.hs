@@ -1,3 +1,5 @@
+{-# LANGUAGE PatternGuards #-}
+
 module InterpStack.Embedded (embeddedInterp) where
 
 import InterpStack.Exp
@@ -42,13 +44,13 @@ mkPrim = SPrim . unsafeCoerce
 unlambda :: AST -> AST
 unlambda (SLam t) | Just t' <- unfree 0 t = SApp primK (unlambda t')
 unlambda (SLam (SVar 0)) = primI
-unlambda (SLam (SApp t (SVar 0))) | Just t' <- unfree 0 t = unlambda t
+unlambda (SLam (SApp t (SVar 0))) | Just t' <- unfree 0 t = unlambda t'
 unlambda (SLam (SLam t)) = unlambda (SLam (unlambda (SLam t)))
 unlambda (SLam (SApp t u))
     = case (unfree 0 t, unfree 0 u) of
-        (Nothing, Nothing) -> primS `SApp` unlambda t `SApp` unlambda u
-        (Just t', Nothing) -> primB `SApp` t' `SApp` u
-        (Nothing, Just u') -> primC `SApp` t `SApp` u'
+        (Nothing, Nothing) -> primS `SApp` unlambda (SLam t) `SApp` unlambda (SLam u)
+        (Just t', Nothing) -> primB `SApp` unlambda t' `SApp` unlambda (SLam u)
+        (Nothing, Just u') -> primC `SApp` unlambda (SLam t) `SApp` unlambda u'
         (Just t', Just u') -> error "Impossible!"
 unlambda (SApp t u) = SApp (unlambda t) (unlambda u)
 unlambda (SVar v) = SVar v
@@ -57,7 +59,8 @@ unlambda (SPrim p) = SPrim p
 compile :: AST -> Any
 compile (SPrim p) = p
 compile (SApp t u) = unsafeCoerce (compile t) (compile u)
-compile _ = error "Don't know how to compile that"
+compile (SLam l) = error "Don't know how to compile lambda"
+compile (SVar v) = error "Don't know how to compile free variable"
 
 embeddedInterp = Interp {
     eval = Just . unsafeCoerce . compile . unlambda . makeAST
