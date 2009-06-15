@@ -48,11 +48,3 @@ convEquiv t t' =
         (nf2, conv2) = convInverseNF t'
     in 
         if nf1 == nf2 then Just (conv1 `mappend` conv2) else Nothing
-
--- X -> (\x. x) X -> (\y. (\x. x) X) Y -> (\x. \y. x) X Y
-convExpandK y = mconcat [
-    convExpandId,
-    convExpandConst y,
-    convInAppL convExpandLambda ]
-
-convReduceK = mconcat [convInAppL convBetaReduce, convBetaReduce]
