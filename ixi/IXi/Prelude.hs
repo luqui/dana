@@ -174,7 +174,7 @@ ll = prove (hoas (_L % _L)) $ arrowTypeHelper (theorem lu) (theorem lh)
 --   LA,LB |- L(A --> B)
 --    LA,LB |- LA
 --    LA,LB |- LB
-arrowType = prove (hoas (_Xi % _L % fun (\a -> _Xi % _L % fun (\b -> _L % (a --> b))))) $
+arrow_type = prove (hoas (_Xi % _L % fun (\a -> _Xi % _L % fun (\b -> _L % (a --> b))))) $
     newName $ \a ->
     lambdaXiRule a (la_hax (theorem ll)) $ \la ->
     newName $ \b ->
