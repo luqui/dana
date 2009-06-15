@@ -5,7 +5,8 @@ import IXi.HOAS
 import IXi.Term
 import IXi.Helpers
 import IXi.Conversion
-import Data.Monoid (mconcat)
+import qualified IXi.Sequent as Sequent
+import Data.Monoid (mconcat, mappend)
 
 _K = fun (\x -> fun (\y -> x))
 _I = fun (\x -> x)
@@ -84,7 +85,7 @@ _U = _K % _True
 -- |- U x
 --  |- K True x
 --   |- True
-u_everything x = conversion convReduceK (theorem true_true)
+u_everything = conversion convReduceK (theorem true_true)
 
 f ° g = fun (\x -> f % (g % x))
 
@@ -96,30 +97,88 @@ convExpandCompose = mconcat [
 
 a --> b = fun (\f -> _Xi % a % (b ° f))
 
+-- ΞA(B°f) -> (A --> B)f
+Just convExpandArrow = convEquiv (hoas (_Xi % a % (b ° f))) (hoas ((a --> b) % f))
+    where
+    a = name (toEnum 0)
+    b = name (toEnum 1)
+    f = name (toEnum 2)
+
 _L = _U --> _H
 
--- |- ΞAB
---  |- H(Ax)
---   |- (H°A)x
---    |- Ux
---    |- ΞU(H°A)
---     |- LA
---  Ax |- Bx
-xiLRule x lPf abPf = 
-    xiRule x 
-        (conversion convExpandCompose 
-            (implRule (hoas _U) (u_everything (name x)) lPf)) 
-        abPf
+-- LA |- H(Ax)
+--  LA |- (H°A)x
+--   LA |- Ux
+--   LA |- ΞU(H°A)
+--    LA |- (U-->H)A
+--     LA |- LA
+la_hax la = 
+    conversion convExpandCompose $
+    implRule (hoas _U) u_everything $
+    conversion convExpandArrow la
 
--- |- LH
---  |- (U --> H)H
---   |- ΞU(H°H)
+-- |- LA
+--  |- (U-->H)A
+--   |- ΞU(H°A)
 --    |- H(Ux)
 --     |- H True
---    Ux |- (H°H)x
---     Ux |- H(Hx)
-lh = prove (hoas (_L % _H)) $
+--    Ux |- (H°A)x
+--     Ux |- H(Ax)
+hax_la x hax = 
     conversion convBetaReduce $
+    xiRule x (conversion (convInAppR convReduceK) (theorem h_true)) $
+    (\_ -> conversion convBetaReduce hax)
+
+-- |- LH
+--  |- H(Hx)
+lh = prove (hoas (_L % _H)) $
+    newName $ \x -> 
+    hax_la x hhRule
+
+
+-- |- LU
+--  |- H(Ux)
+--   |- H True
+lu = prove (hoas (_L % _U)) $
     newName $ \x ->
-    xiRule x (conversion (convInAppR convReduceK) (theorem h_true))
-             (\h -> conversion convBetaReduce hhRule)
+    hax_la x (conversion (convInAppR convReduceK) (theorem h_true))
+
+
+-- LA, LB |- L(A --> B)
+--  LA, LB |- H((A-->B)x)
+--   LA, LB |- H(ΞA(B°x))
+--    LA, LB |- H(Ay)
+--     LA, LB |- LA
+--    LA, LB, Ay |- H((B°x)y)
+--     LA, LB, Ay |- H(B(xy))
+arrowTypeHelper la lb = 
+    newName $ \x ->
+    hax_la x $
+    conversion (convInAppR convBetaReduce) $
+    newName $ \y ->
+    hxiRule y (la_hax la)
+              (\_ -> conversion (convInAppR convBetaReduce) (la_hax lb))
+
+-- |- LL
+--  |- L(U --> H)
+--   |- LU
+--   |- LH
+ll = prove (hoas (_L % _L)) $ arrowTypeHelper (theorem lu) (theorem lh)
+
+-- |- ΞL(\A. ΞL(\B. L(A --> B)))
+--  |- H(LA)
+--   |- LL
+--  LA |- ΞL(\B. L(A --> B))
+--   LA |- H(LB)
+--    LA |- LL
+--   LA,LB |- L(A --> B)
+--    LA,LB |- LA
+--    LA,LB |- LB
+arrowType = prove (hoas (_Xi % _L % fun (\a -> _Xi % _L % fun (\b -> _L % (a --> b))))) $
+    newName $ \a ->
+    lambdaXiRule a (la_hax (theorem ll)) $ \la ->
+    newName $ \b ->
+    lambdaXiRule b (la_hax (theorem ll)) $ \lb ->
+    arrowTypeHelper la lb
+
+
