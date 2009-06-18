@@ -1,4 +1,6 @@
-module IXi.Helpers where
+module IXi.Helpers 
+    ( convNF, convInverseNF, convEquiv, convInverseBeta )
+where
 
 import IXi.Term
 import IXi.Conversion
@@ -40,7 +42,8 @@ convInverseNF = second getDual . runWriter . go
     second f (a,b) = (a, f b)
     tell' = tell . Dual
     censor' = censor . inDual
-    decr = fromJust . unfree 0
+
+decr = fromJust . unfree 0
 
 convEquiv :: Term -> Term -> Maybe Conversion
 convEquiv t t' = 
@@ -48,3 +51,16 @@ convEquiv t t' =
         (nf2, conv2) = convInverseNF t'
     in 
         if nf1 == nf2 then Just (conv1 `mappend` conv2) else Nothing
+
+convInverseBeta :: Term -> Conversion
+convInverseBeta (Var 0) = convExpandId
+convInverseBeta t | not (free 0 t) = convExpandConst (decr t)
+convInverseBeta (a :% b)
+    | not (free 0 a) =
+        convInAppR (convInverseBeta b) `mappend` convExpandRight
+    | not (free 0 b) =
+        convInAppL (convInverseBeta a) `mappend` convExpandLeft
+    | otherwise =
+        convInAppL (convInverseBeta a) `mappend` convInAppR (convInverseBeta b) `mappend` convExpandProj
+convInverseBeta (Lambda t) =
+    convInLambda (convInverseBeta (subst 0 (Var 1) t)) `mappend` convExpandLambda
