@@ -1,4 +1,4 @@
-module IXi.Tactics where
+module IXi.Prelude where
 
 import IXi.Tactic
 import IXi.HOAS
