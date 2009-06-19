@@ -1,5 +1,5 @@
 module IXi.Helpers 
-    ( convNF, convInverseNF, convEquiv, convInverseBeta
+    ( convNF, convInverseNF, convEquiv, convInverseBeta, convAbstract
     , unfoldn, foldn )
 where
 
@@ -91,3 +91,6 @@ foldn n = mconcat . zipWith ($) appLs . reverse . bodies n
     bodies 0 _ = []
     bodies n t@(Lambda t') = t : bodies (n-1) t'
     bodies n _ = error "foldn not given n nested lambdas"
+
+convAbstract :: Name -> Term -> Conversion
+convAbstract name = convInverseBeta . Lambda . abstract name

@@ -3,7 +3,7 @@ module IXi.Term
     , showTermWith, showTerm
     , quote, subst, substNamed
     , unfree, free, freeNames, nameFree
-    , swapVars
+    , swapVars, abstract
 
     , Name, safeName, safeName'
     )
@@ -118,3 +118,15 @@ nameFree n t = n `Set.member` freeNames t
 -- swaps indices 0 and 1
 swapVars :: Term -> Term
 swapVars = subst 0 (Var 1) . quote 2
+
+abstract :: Name -> Term -> Term
+abstract name = go 0
+    where
+    go n (Lambda t) = Lambda (go (n+1) t)
+    go n (t :% u) = go n t :% go n u
+    go n (Var z) | z < n = Var z
+                 | otherwise = Var (z+1)
+    go n (NameVar nm) | nm == name = Var n
+                      | otherwise = NameVar nm
+    go n Xi = Xi
+    go n H = H

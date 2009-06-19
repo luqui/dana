@@ -3,7 +3,7 @@ module IXi.Proof
     , hypothesis, conversion
     , implRule, xiRule, hxiRule, hhRule, xihRule
     , theorem
-    , Theorem, thmStatement, prove
+    , Theorem, thmStatement, thmProof, prove
     )
 where
 
@@ -22,6 +22,7 @@ data Proof
     | HHRule
     | XIHRule Proof
     | Theorem Theorem
+    deriving (Show)
 
 hypothesis = Hypothesis
 conversion = Conversion
@@ -71,6 +72,9 @@ instance Show Theorem where
 
 thmStatement :: Theorem -> Term
 thmStatement (MkTheorem t _) = t
+
+thmProof :: Theorem -> Proof
+thmProof (MkTheorem _ pf) = pf
 
 
 prove :: Term -> Proof -> Either String Theorem

@@ -33,10 +33,10 @@ unfold_Impl = unfoldn 2
 
 -- |- Q
 --  |- KQI
---   |- Ξ(KP)(KQ)
---    |- P ==> Q
 --   |- KPI
 --    |- P
+--   |- Ξ(KP)(KQ)
+--    |- P ==> Q
 modusPonens :: Exp -> Tactic -> Tactic -> Tactic
 modusPonens p pqPf pPf = 
     conversion (fold_K _I) $
@@ -108,8 +108,8 @@ unfold_Compose = unfoldn 3
 _Arrow = fun (\a -> fun (\b -> fun (\f -> _Xi % a % (b ° f))))
 a --> b = _Arrow % a % b
 
-fold_arrow = foldn 3 (hoas _Arrow)
-unfold_arrow = unfoldn 3
+fold_Arrow = foldn 3 (hoas _Arrow)
+unfold_Arrow = unfoldn 3
 
 _L = _U --> _H
 
@@ -122,7 +122,7 @@ _L = _U --> _H
 la_hax la = 
     conversion fold_Compose $
     implRule (hoas _U) u_everything $
-    conversion fold_arrow la
+    conversion fold_Arrow la
 
 -- |- LA
 --  |- (U-->H)A
@@ -132,7 +132,7 @@ la_hax la =
 --    Ux |- (H°A)x
 --     Ux |- H(Ax)
 hax_la x hax = 
-    conversion unfold_arrow $
+    conversion unfold_Arrow $
     xiRule x (conversion (convInAppR unfold_K) (theorem thm_h_true)) $
     (\_ -> conversion unfold_Compose hax)
 
@@ -161,7 +161,7 @@ thm_lu = prove (hoas (_L % _U)) $
 arrowTypeHelper la lb = 
     newName $ \x ->
     hax_la x $
-    conversion (convInAppR unfold_arrow) $
+    conversion (convInAppR unfold_Arrow) $
     newName $ \y ->
     hxiRule y (la_hax la)
               (\_ -> conversion (convInAppR unfold_Compose) (la_hax lb))
@@ -170,7 +170,8 @@ arrowTypeHelper la lb =
 --  |- L(U --> H)
 --   |- LU
 --   |- LH
-thm_ll = prove (hoas (_L % _L)) $ arrowTypeHelper (theorem thm_lu) (theorem thm_lh)
+thm_ll = prove (hoas (_L % _L)) $ 
+    arrowTypeHelper (theorem thm_lu) (theorem thm_lh)
 
 -- |- ΞL(\A. ΞL(\B. L(A --> B)))
 --  |- H(LA)
@@ -187,3 +188,48 @@ thm_arrow_type = prove (hoas (_Xi % _L % fun (\a -> _Xi % _L % fun (\b -> _L % (
     newName $ \b ->
     lambdaXiRule b (la_hax (theorem thm_ll)) $ \lb ->
     arrowTypeHelper la lb
+
+
+-- (A-->B)f, Ax |- B(fx)
+--  (A-->B)f, Ax |- (B°f)x
+--   (A-->B)f, Ax |- Ax
+--   (A-->B)f, Ax |- ΞA(B°f)
+--    (A-->B)f, Ax |- (A-->B)f
+arrowApplyHelper a pfABf pfAx = 
+    conversion fold_Compose $
+    implRule (hoas a) pfAx (conversion fold_Arrow pfABf)
+
+pullName name rest = inspect (\seq -> conversion (convAbstract name (Sequent.goal seq)) rest)
+
+-- |- ΞL(\A. ΞL(\B. Ξ(A-->B)(\f. ΞA(\x. B(fx)))))
+--  |- LL
+--  LA |- ΞL(\B. Ξ(A-->B)(\f. ΞA(\x. B(fx))))
+--   LA |- LL
+--   LA, LB |- Ξ(A-->B)(\f. ΞA(\x. B(fx)))
+--    LA, LB |- L(A-->B)
+--     LA, LB |- (\B. L(A-->B))B
+--      LA, LB |- LB
+--      LA, LB |- ΞL(\B. L(A --> B))
+--       LA, LB |- (\A. ΞL(\B. L(A --> B))A
+--        LA, LB |- LA
+--        LA, LB |- ΞL(\A. ΞL(\B. L(A --> B)))
+--    LA, LB, (A-->B)f |- ΞA(\x. B(fx))
+--     LA, LB, (A-->B)f |- LA
+--     LA, LB, (A-->B)f, Ax |- B(fx)
+--      {arrowApplyHelper}
+thm_arrow_apply = prove (hoas $
+        _Xi % _L % fun (\a -> _Xi % _L % fun (\b -> 
+        _Xi % (a --> b) % fun (\f -> _Xi % a % fun (\x ->
+        b % (f % x)))))) $
+    newName $ \a ->
+    lambdaXiRule a (la_hax (theorem thm_ll)) $ \la ->
+    newName $ \b ->
+    lambdaXiRule b (la_hax (theorem thm_ll)) $ \lb ->
+    newName $ \f ->
+    lambdaXiRule f (la_hax $
+        pullName b $ implRule (hoas _L) lb $
+        pullName a $ implRule (hoas _L) la $
+        theorem thm_arrow_type) $ \abf ->
+    newName $ \x ->
+    lambdaXiRule x (la_hax la) $ \ax ->
+    arrowApplyHelper (name a) abf ax
