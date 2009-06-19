@@ -34,7 +34,7 @@ convInverseNF = second getDual . runWriter . go
                 | not (free 0 a) -> tell' convExpandRight >> go (decr a :% (Lambda b :% u))
                 | not (free 0 b) -> tell' convExpandLeft  >> go ((Lambda a :% u) :% decr b)
                 | otherwise -> tell' convExpandProj >> go ((Lambda a :% u) :% (Lambda b :% u))
-            Lambda (Lambda a) -> tell' convExpandLambda >> go (Lambda (Lambda (subst 0 (Var 1) a) :% u))
+            Lambda (Lambda a) -> tell' convExpandLambda >> go (Lambda (Lambda (swapVars a) :% u))
             _ -> (t' :%) <$> censor' convInAppR (go u)
     go x = return x
     
@@ -53,14 +53,20 @@ convEquiv t t' =
         if nf1 == nf2 then Just (conv1 `mappend` conv2) else Nothing
 
 convInverseBeta :: Term -> Conversion
-convInverseBeta (Var 0) = convExpandId
-convInverseBeta t | not (free 0 t) = convExpandConst (decr t)
-convInverseBeta (a :% b)
-    | not (free 0 a) =
-        convInAppR (convInverseBeta b) `mappend` convExpandRight
-    | not (free 0 b) =
-        convInAppL (convInverseBeta a) `mappend` convExpandLeft
-    | otherwise =
-        convInAppL (convInverseBeta a) `mappend` convInAppR (convInverseBeta b) `mappend` convExpandProj
-convInverseBeta (Lambda t) =
-    convInLambda (convInverseBeta (subst 0 (Var 1) t)) `mappend` convExpandLambda
+convInverseBeta (Lambda t) = go t
+    where
+    go (Var 0) = convExpandId
+    go t | not (free 0 t) = convExpandConst (decr t)
+    go (a :% b)
+        | not (free 0 a) =
+            convInAppR (go b) `mappend` convExpandRight
+        | not (free 0 b) =
+            convInAppL (go a) `mappend` convExpandLeft
+        | otherwise =
+            convInAppL (go a) `mappend` convInAppR (go b) `mappend` convExpandProj
+    go (Lambda t) =
+        convInLambda (go (swapVars t)) `mappend` convExpandLambda
+convInverseBeta _ = error "convInverseBeta not given a lambda argument"
+
+unfoldn :: Int -> Conversion
+unfoldn n = mconcat . reverse . take n $ iterate convInAppL convBetaReduce

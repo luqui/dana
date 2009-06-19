@@ -89,5 +89,5 @@ convert ConvExpandRight (a :% (Lambda b :% c))
     = Just (Lambda (quote 0 a :% b) :% c)
 -- \y. (\x. A) C -> (\x. \y. A) C  (y not free in C)
 convert ConvExpandLambda (Lambda (Lambda a :% c))
-    = (Lambda (Lambda (subst 0 (Var 1) a)) :%) <$> unfree 0 c
+    = (Lambda (Lambda (swapVars a)) :%) <$> unfree 0 c
 convert _ _ = Nothing

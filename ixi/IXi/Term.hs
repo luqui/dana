@@ -3,6 +3,7 @@ module IXi.Term
     , showTermWith, showTerm
     , quote, subst, substNamed
     , unfree, free, freeNames, nameFree
+    , swapVars
 
     , Name, safeName, safeName'
     )
@@ -113,3 +114,7 @@ freeNames _ = Set.empty
 
 nameFree :: Name -> Term -> Bool
 nameFree n t = n `Set.member` freeNames t
+
+-- swaps indices 0 and 1
+swapVars :: Term -> Term
+swapVars = subst 0 (Var 1) . quote 2

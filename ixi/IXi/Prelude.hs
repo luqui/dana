@@ -10,7 +10,7 @@ import Data.Monoid (mconcat, mappend)
 
 _K = fun (\x -> fun (\y -> x))
 -- x -> Kxy
-fold_K y = convInverseBeta . hoas . fun $ \x -> y
+fold_K y = convInverseBeta . hoas $ fun (\x -> fun (\y -> x))
 -- Kxy -> x
 unfold_K = mconcat [convInAppL convBetaReduce, convBetaReduce]
 
@@ -188,5 +188,3 @@ thm_arrow_type = prove (hoas (_Xi % _L % fun (\a -> _Xi % _L % fun (\b -> _L % (
     newName $ \b ->
     lambdaXiRule b (la_hax (theorem thm_ll)) $ \lb ->
     arrowTypeHelper la lb
-
-
