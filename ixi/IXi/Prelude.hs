@@ -9,20 +9,26 @@ import qualified IXi.Sequent as Sequent
 import Data.Monoid (mconcat, mappend)
 
 _K = fun (\x -> fun (\y -> x))
--- x -> Kxy
-fold_K y = convInverseBeta . hoas $ fun (\x -> fun (\y -> x))
+fold_K y = mconcat [ convExpandConst (hoas y)                -- (\y.X)Y
+                   , convInAppL (convInLambda convExpandId)  -- (\y.(\x.x)X)Y
+                   , convInAppL (convExpandLambda)           -- (\xy.X)Y
+                   ]
 -- Kxy -> x
-unfold_K = mconcat [convInAppL convBetaReduce, convBetaReduce]
+unfold_K = unfoldn 2
 
 
 _I = fun (\x -> x)
 -- x -> Ix
-fold_I = convInverseBeta (hoas _I)
+fold_I = foldn 1 (hoas _I)
 -- Ix -> x
-unfold_I = convBetaReduce
+unfold_I = unfoldn 1
 
 
-p ==> q = _Xi % (_K % p) % (_K % q)
+_Impl = fun (\p -> fun (\q -> _Xi % (_K % p) % (_K % q)))
+p ==> q = _Impl % p % q
+
+fold_Impl = foldn 2 (hoas _Impl)
+unfold_Impl = unfoldn 2
 
 
 -- |- Q
@@ -34,7 +40,8 @@ p ==> q = _Xi % (_K % p) % (_K % q)
 modusPonens :: Exp -> Tactic -> Tactic -> Tactic
 modusPonens p pqPf pPf = 
     conversion (fold_K _I) $
-    implRule (hoas (_K % p % _I)) (conversion unfold_K pPf) pqPf
+    implRule (hoas (_K % p % _I)) (conversion unfold_K pPf) 
+                                  (conversion fold_Impl pqPf)
 
 -- |- P ==> Q
 --  |- Ξ(KP)(KQ)
@@ -45,6 +52,7 @@ modusPonens p pqPf pPf =
 implAbstract :: Tactic -> (Hypothesis -> Tactic) -> Tactic
 implAbstract hpPf pqPf = 
     newName $ \n -> 
+    conversion unfold_Impl $
     xiRule n (conversion (convInAppR unfold_K) hpPf)
                 (\kpx -> conversion unfold_K (pqPf (conversion (fold_K (name n)) kpx)))
 
@@ -91,26 +99,17 @@ _U = _K % _True
 --   |- True
 u_everything = conversion unfold_K (theorem thm_true_true)
 
-f ° g = fun (\x -> f % (g % x))
--- (f ° g) x -> f (g x)
-unfold_compose = convBetaReduce
--- f (g x) -> (f ° g) x
--- A(Bx) -> A(B((\x.x)x)) -> A((\x. Bx)x) -> (\x. A(Bx))x
-fold_compose = mconcat [
-    convInAppR (convInAppR convExpandId),
-    convInAppR (convExpandRight),
-    convExpandRight ]
+_Compose = fun (\f -> fun (\g -> fun (\x -> f % (g % x))))
+f ° g = _Compose % f % g
 
-a --> b = fun (\f -> _Xi % a % (b ° f))
+fold_Compose = foldn 3 (hoas _Compose)
+unfold_Compose = unfoldn 3
 
--- ΞA(B°f) -> (A --> B)f
-Just fold_arrow = convEquiv (hoas (_Xi % a % (b ° f))) (hoas ((a --> b) % f))
-    where
-    a = name (toEnum 0)
-    b = name (toEnum 1)
-    f = name (toEnum 2)
--- (A --> B)f -> ΞA(B°f)
-unfold_arrow = convBetaReduce
+_Arrow = fun (\a -> fun (\b -> fun (\f -> _Xi % a % (b ° f))))
+a --> b = _Arrow % a % b
+
+fold_arrow = foldn 3 (hoas _Arrow)
+unfold_arrow = unfoldn 3
 
 _L = _U --> _H
 
@@ -121,7 +120,7 @@ _L = _U --> _H
 --    LA |- (U-->H)A
 --     LA |- LA
 la_hax la = 
-    conversion fold_compose $
+    conversion fold_Compose $
     implRule (hoas _U) u_everything $
     conversion fold_arrow la
 
@@ -135,7 +134,7 @@ la_hax la =
 hax_la x hax = 
     conversion unfold_arrow $
     xiRule x (conversion (convInAppR unfold_K) (theorem thm_h_true)) $
-    (\_ -> conversion unfold_compose hax)
+    (\_ -> conversion unfold_Compose hax)
 
 -- |- LH
 --  |- H(Hx)
@@ -165,7 +164,7 @@ arrowTypeHelper la lb =
     conversion (convInAppR unfold_arrow) $
     newName $ \y ->
     hxiRule y (la_hax la)
-              (\_ -> conversion (convInAppR unfold_compose) (la_hax lb))
+              (\_ -> conversion (convInAppR unfold_Compose) (la_hax lb))
 
 -- |- LL
 --  |- L(U --> H)

@@ -72,6 +72,17 @@ convInverseBeta _ = error "convInverseBeta not given a lambda argument"
 unfoldn :: Int -> Conversion
 unfoldn n = mconcat . reverse . take n $ iterate convInAppL convBetaReduce
 
+-- It seems that ignored parts of terms become free variables in the output.
+-- This may be distressing, as it means you can convert a closed term into
+-- one with free variables.  I don't see a good reason to disallow it though --
+-- any choice for that variable yields a correct conversion.
+--
+-- However, there is still a grossness about it; you would like it to be
+-- maximal: you get exactly the number of free variables out as you have
+-- choices, so you can characterize all such conversions by filling in the
+-- variables.  This is not so currently, as can be seen from the 3-fold of 
+-- the term \xyz. yy, which expands to the most hideous and perplexing
+-- (\xyz. yy) (\xy. xx) ?0 (xx) on input (?0 ?0).
 foldn :: Int -> Term -> Conversion
 foldn n = mconcat . zipWith ($) appLs . reverse . bodies n
     where

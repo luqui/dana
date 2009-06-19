@@ -18,7 +18,7 @@ import Data.Monoid
 
 data Conversion
     = ConvId
-    | ConvTrans Conversion Conversion
+    | Conversion :=>: Conversion
     | ConvInLambda Conversion
     | ConvInAppL Conversion
     | ConvInAppR Conversion
@@ -34,13 +34,14 @@ data Conversion
     | ConvExpandLeft
     | ConvExpandRight
     | ConvExpandLambda
+    deriving (Show)
 
 instance Monoid Conversion where
     mempty = convId
     mappend = convTrans
 
 convId = ConvId
-convTrans = ConvTrans
+convTrans = (:=>:)
 convInLambda = ConvInLambda
 convInAppL = ConvInAppL
 convInAppR = ConvInAppR
@@ -58,7 +59,7 @@ convert :: Conversion -> Term -> Maybe Term
 -- X -> X
 convert ConvId t = Just t
 -- (X -> Y) (Y -> Z) -> (X -> Z)
-convert (ConvTrans c c') t = (convert c >=> convert c') t
+convert (c :=>: c') t = (convert c >=> convert c') t
 -- (X -> Y) -> (\x. X -> \x. y)
 convert (ConvInLambda c) (Lambda t) = Lambda <$> convert c t
 -- (X -> Y) -> (X Z -> Y Z)
