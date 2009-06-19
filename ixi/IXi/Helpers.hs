@@ -1,5 +1,6 @@
 module IXi.Helpers 
-    ( convNF, convInverseNF, convEquiv, convInverseBeta )
+    ( convNF, convInverseNF, convEquiv, convInverseBeta
+    , unfoldn, foldn )
 where
 
 import IXi.Term
@@ -70,3 +71,12 @@ convInverseBeta _ = error "convInverseBeta not given a lambda argument"
 
 unfoldn :: Int -> Conversion
 unfoldn n = mconcat . reverse . take n $ iterate convInAppL convBetaReduce
+
+foldn :: Int -> Term -> Conversion
+foldn n = mconcat . zipWith ($) appLs . reverse . bodies n
+    where
+    appLs = iterate (convInAppL .) convInverseBeta
+    
+    bodies 0 _ = []
+    bodies n t@(Lambda t') = t : bodies (n-1) t'
+    bodies n _ = error "foldn not given n nested lambdas"
