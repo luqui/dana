@@ -1,6 +1,6 @@
 module IXi.Tactic 
     ( Tactic, Hypothesis
-    , conversion, implRule, xiRule, hxiRule, hhRule, xihRule, theorem
+    , conversion, implRule, xiRule, hxiRule, hhRule, theorem
     , inspect, (>|<)
     , newName, failure
     , prove
@@ -56,12 +56,6 @@ hhRule :: Tactic
 hhRule = Tactic $ \seq -> do
     () <- Seq.hhRule seq
     return P.hhRule
-
-xihRule :: Hypothesis -> Tactic
-xihRule tac = Tactic $ \seq -> do
-    seq' <- Seq.xihRule seq
-    pf <- unTactic tac seq'
-    return (P.xihRule pf)
 
 theorem :: P.Theorem -> Tactic
 theorem thm = Tactic $ \seq -> do

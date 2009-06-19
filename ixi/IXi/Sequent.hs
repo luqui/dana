@@ -3,7 +3,7 @@ module IXi.Sequent
     , goal, hypotheses
     , Err
     , hypothesis, conversion, implRule
-    , xiRule, hxiRule, hhRule, xihRule
+    , xiRule, hxiRule, hhRule
     , newName
     )
 where
@@ -70,10 +70,3 @@ hhRule (hyps :|- goal) = invalid goal "Goal is not an H-H-form"
 
 newName :: Sequent -> Name
 newName seq = safeName' (goal seq : hypotheses seq)
-
--- conservative extension, Γ,x |- Hx
-xihRule :: Sequent -> Err Sequent
-xihRule (hyps :|- goal) =
-    case goal of 
-        H :% x -> valid (hyps :|- x)
-        _ -> invalid goal "Goal is not an H-form"
