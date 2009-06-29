@@ -1,0 +1,15 @@
+Trying to solve the "infinite unfolding" problem, as discussed
+in Thyer's "Lazy Specialization", section 6.2.
+
+Keep the terms normalizing, by convention or using a type system.
+Introduce a constant Y into the language, standing for the fixed
+point combinator but with different unfolding rules.
+
+Otherwise use HNF or complete laziness.  The term "normal form"
+refers to the normal forms of those strategies.
+
+If F -> G then YF -> YG.
+If F is a normal form of the form λx.λy.E, then YFA -> F(YF)A
+
+The question is whether we lose optimization by self-fusing.  Are
+we repeating any significant computations?
