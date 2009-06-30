@@ -46,7 +46,7 @@ unlambda (SLam (SLam t)) = unlambda (SLam (unlambda (SLam t)))
 unlambda (SLam (SApp t u))
     = case (unfree 0 t, unfree 0 u) of
         (Nothing, Nothing) -> primS `SApp` unlambda (SLam t) `SApp` unlambda (SLam u)
-        (Just t', Nothing) -> primB `SApp` unlambda t' `SApp` unlambda (SLam u)
+        (Just t', Nothing) -> primB `SApp` unlambda t'       `SApp` unlambda (SLam u)
         (Nothing, Just u') -> primC `SApp` unlambda (SLam t) `SApp` unlambda u'
         (Just t', Just u') -> error "Impossible!"
 unlambda (SApp t u) = SApp (unlambda t) (unlambda u)

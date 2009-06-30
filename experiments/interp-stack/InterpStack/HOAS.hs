@@ -27,6 +27,6 @@ buildExp t = evalState (go Map.empty t) 0
     go m (Lam f) = do
         i <- get
         put $! i+1
-        fmap C.Lam $ go (Map.insert i 0 . Map.map succ $ m) (f (VarID i))
+        fmap C.Lam . go (Map.insert i 0 . Map.map succ $ m) . f $ VarID i
     go m (Lit a) = return $ C.Lit a
     go m (VarID z) = return $ C.Var (m Map.! z)
