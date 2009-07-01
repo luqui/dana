@@ -28,7 +28,7 @@ subst = go 0 0
     go n q to (VVar z) =
         case compare n z of
             LT -> VVar (z-1)
-            EQ -> quote q to
+            EQ -> quote q to  -- <- This traverses to, and breaks sharing
             GT -> VVar z
     go n q to (VPrim p) = VPrim p
 
