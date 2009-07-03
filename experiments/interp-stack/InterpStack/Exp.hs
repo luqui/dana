@@ -14,6 +14,10 @@ class Value v where
     applyValue :: v -> v -> v
     canApply :: v -> Bool
 
+instance Value () where
+    applyValue = undefined
+    canApply _ = False
+
 data Interp = Interp {
     eval :: forall v. (Value v) => Exp v -> Maybe v
 }

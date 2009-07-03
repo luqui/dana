@@ -1,5 +1,6 @@
 import InterpStack.Exp
 import InterpStack.LazyNF
+import InterpStack.DepthLazyNF
 import InterpStack.Embedded
 import InterpStack.HOAS
 import Debug.Trace
@@ -14,7 +15,7 @@ data IVal
 
 instance Value IVal where
     applyValue IInc (IInt z) = IInt (z+1)
-    applyValue _ _ = error "type error"
+    applyValue x y = error $ "type error: (" ++ show x ++ ") (" ++ show y ++ ")"
 
     canApply (IInt _) = False
     canApply IInc = True
@@ -93,6 +94,7 @@ main = do
     [interpStr, n] <- getArgs
     let interp = case interpStr of
             "lazyNF" -> lazyNFInterp
+            "depthLazyNF" -> depthLazyNFInterp
             "embedded" -> embeddedInterp
     hSetBuffering stdout NoBuffering
     print . eval interp . iter (read n) layer . buildExp $ program_
