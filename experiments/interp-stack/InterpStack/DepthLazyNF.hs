@@ -24,14 +24,15 @@ app _ (_ :@ VPrim _) (_ :@ VLam _) = error "Apply primitive to lambda not suppor
 app δ l r = δ :@ VApp l r
 
 subst :: (Value a) => Depth -> Depth -> Val a -> Val a -> Val a
-subst δs shiftδ arg (δbody :@ body)
-    | δbody <= δs = δbody :@ body
-    | VLam λ   <- body = δnew :@ VLam (subst δs shiftδ arg λ)
-    | VApp l r <- body = app δnew (subst δs shiftδ arg l) (subst δs shiftδ arg r)
-    | VVar     <- body = if δs+1 == δbody then arg else δnew :@ VVar
-    | VPrim v  <- body = 0 :@ VPrim v
+subst δs shiftδ arg = go
     where
-    δnew = δbody + shiftδ
+    go (δbody :@ body) | δbody <= δs = δbody :@ body
+    go (δbody :@ VLam λ)   = newδ δbody :@ VLam (go λ)
+    go (δbody :@ VApp l r) = app (newδ δbody) (go l) (go r)
+    go (δbody :@ VVar)     = if δs+1 == δbody then arg else (newδ δbody) :@ VVar
+    go (_     :@ VPrim v)  = 0 :@ VPrim v
+
+    newδ δbody = δbody + shiftδ
 
 minFree n (t :% u) = plusWith min (minFree n t) (minFree n u)
 minFree n (Lam t) = minFree (n+1) t
