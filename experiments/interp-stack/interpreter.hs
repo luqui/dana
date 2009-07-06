@@ -6,6 +6,7 @@ import InterpStack.HOAS
 import Debug.Trace
 import System.IO
 import System.Environment
+import Data.List (intercalate)
 
 data IVal
     = IInt !Int
@@ -90,11 +91,23 @@ layer x = buildExp (eInterp_ % nil_) :% quote x
 
 iter n = foldr (.) id . replicate n
 
+interps = [ "lazyNF" --> lazyNFInterp
+          , "depthLazyNF" --> depthLazyNFInterp
+          , "embedded" --> embeddedInterp
+          ]
+    where (-->) = (,)
+
 main = do
-    [interpStr, n] <- getArgs
-    let interp = case interpStr of
-            "lazyNF" -> lazyNFInterp
-            "depthLazyNF" -> depthLazyNFInterp
-            "embedded" -> embeddedInterp
+    args <- getArgs
+    (interpStr, n) <- case args of
+        [interpStr, n] -> return (interpStr,n)
+        _ -> fail $ "Usage: interpreter <interp> <height>, where interp is one of [" 
+                  ++ choices ++ "], and height is the height of the interpreter stack"
+    interp <- case lookup interpStr interps of
+            Just i -> return i
+            Nothing -> fail $ "Not a valid interpreter.  Valid choices are " ++ choices
     hSetBuffering stdout NoBuffering
     print . eval interp . iter (read n) layer . buildExp $ program_
+
+    where
+    choices = intercalate "," . map fst $ interps
