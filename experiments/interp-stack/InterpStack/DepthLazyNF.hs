@@ -1,9 +1,13 @@
+{-# LANGUAGE PatternGuards #-}
+
 module InterpStack.DepthLazyNF (depthLazyNFInterp, compile, Val) where
 
 import InterpStack.Exp
 
+type Depth = Int
+
 infix 9 :@
-data Val a = Int :@ Node a
+data Val a = Depth :@ Node a
     deriving (Show)
 
 data Node a
@@ -13,31 +17,21 @@ data Node a
     | VPrim a
     deriving (Show)
 
-infixl 8 %%
-(%%) :: (Value a) => Val a -> Val a -> Val a
-δf :@ VLam body %%  arg           = subst (δf+1) arg body
-_ :@ VPrim p    %%  _ :@ VPrim q  = 0 :@ VPrim (applyValue p q)
-_ :@ VPrim p    %%  _ :@ VLam _   = error "Can't apply a primitive to a lambda"
-_ :@ VPrim p    %%  δz :@ z       = δz :@ VApp (0 :@ VPrim p) (δz :@ z)
-δexp :@ exp     %%  δarg :@ arg   = max δexp δarg :@ VApp (δexp :@ exp) (δarg :@ arg)
+app :: (Value a) => Depth -> Val a -> Val a -> Val a
+app δ (δλ :@ VLam λ) arg = subst δλ (δ - δλ - 1) arg λ
+app _ (_ :@ VPrim a) (_ :@ VPrim b) = 0 :@ VPrim (applyValue a b)
+app _ (_ :@ VPrim _) (_ :@ VLam _) = error "Apply primitive to lambda not supported"
+app δ l r = δ :@ VApp l r
 
-subst :: (Value a) => Int -> Val a -> Val a -> Val a
-subst δ arg@(δarg :@ argnode) (δbody :@ body) 
-    | δbody < δ = δbody :@ body
-    | otherwise =
-        case body of
-            VLam b -> δnew :@ VLam (subst δ arg b)
-            VApp l r -> clamp δnew (subst δ arg l %% subst δ arg r)
-            VVar -> case compare δbody δ of
-                        EQ -> arg
-                        GT -> (δbody-1) :@ VVar
-                        LT -> δbody :@ VVar
-            VPrim a -> 0 :@ VPrim a
+subst :: (Value a) => Depth -> Depth -> Val a -> Val a -> Val a
+subst δs shiftδ arg (δbody :@ body)
+    | δbody <= δs = δbody :@ body
+    | VLam λ   <- body = δnew :@ VLam (subst δs shiftδ arg λ)
+    | VApp l r <- body = app δnew (subst δs shiftδ arg l) (subst δs shiftδ arg r)
+    | VVar     <- body = if δs+1 == δbody then arg else δnew :@ VVar
+    | VPrim v  <- body = 0 :@ VPrim v
     where
-    δnew = max (δbody-1) δarg
-
-clamp :: Int -> Val a -> Val a
-clamp c ~(x :@ v) = c :@ v
+    δnew = δbody + shiftδ
 
 minFree n (t :% u) = plusWith min (minFree n t) (minFree n u)
 minFree n (Lam t) = minFree (n+1) t
@@ -53,7 +47,10 @@ plusWith f (Just x) (Just y) = Just (f x y)
 compile :: (Value a) => Exp a -> Val a
 compile = go []
     where
-    go depths (t :% u) = go depths t %% go depths u
+    go depths (t :% u) = app (max δt δu) (δt :@ t') (δu :@ u')
+        where
+        δt :@ t' = go depths t
+        δu :@ u' = go depths u
     go depths (Lam t) = δnew :@ VLam (go (δnew : depths) t)
         where
         δnew = case minFree 0 (Lam t) of
